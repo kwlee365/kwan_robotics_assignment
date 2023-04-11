@@ -73,6 +73,7 @@ void ArmController::compute()
 
 		// Kwan add
 
+
 		x_target_.setZero();
 		x_cubic_.setZero();
 		xd_cubic_.setZero();
@@ -122,7 +123,8 @@ void ArmController::compute()
 
 		qdot_desired_ = j_inverse_ * xd_cubic_;
 
-		q_desired_ = q_desired_ + qdot_desired_ / hz_;
+		q_desired_ = q_ + qdot_desired_ / hz_;
+		// q_desired_ = q_desired_ + qdot_desired_ / hz_;
 
 		stringstream ss;
 		ss << x_.transpose() << " "
@@ -156,15 +158,16 @@ void ArmController::compute()
 
 		q_diff_ = j_inverse_ * x_error_;
 
-		q_desired_ = q_desired_ + q_diff_;
+		q_desired_ = q_ + q_diff_;
+		// q_desired_ = q_desired_ + q_diff_;
 
 		stringstream ss;
-		ss << Map< Matrix<double, 1, 9> >(rotation_cubic_.data(), rotation_cubic_.size()) << " "
-		   << x_.transpose() << " "
-		   << x_dot_.transpose() << " "
-		   << Map< Matrix<double, 1, 9> >(rotation_.data(), rotation_.size());
+		// ss << Map< Matrix<double, 1, 9> >(rotation_cubic_.data(), rotation_cubic_.size()) << " "
+		//    << x_.transpose() << " "
+		//    << x_dot_.transpose() << " "
+		//    << Map< Matrix<double, 1, 9> >(rotation_.data(), rotation_.size());
 
-		// ss << q_desired_(3) << " " << q_(3);
+		ss << q_desired_(3) << " " << q_(3);
 		record(1, duration, ss);
 	}
 	else if (control_mode_ == "hw_3_3")
@@ -180,45 +183,39 @@ void ArmController::compute()
 		// Desired trajectory
 		x_cubic_ = DyrosMath::cubicVector<3>(play_time_, control_start_time_, control_start_time_ + duration,
 											 x_init_, x_target_, Vector3d::Zero(), Vector3d::Zero());
+		rotation_cubic_ = DyrosMath::rotationCubic(play_time_, control_start_time_, control_start_time_ + duration, 
+												   rotation_init_, rotation_target_);
+
 		xd_cubic_.head(3) = DyrosMath::cubicDotVector<3>(play_time_, control_start_time_, control_start_time_ + duration,
 														 x_init_, x_target_, Vector3d::Zero(), Vector3d::Zero());
 		xd_cubic_.tail(3) = DyrosMath::rotationCubicDot(play_time_, control_start_time_, control_start_time_ + duration,
 														Vector3d::Zero(), Vector3d::Zero(), rotation_init_, rotation_target_);
 
-		// CLIK
+		// CLIK (Control, not Planning)
 		Eigen::Matrix6d Kp_;
 		Kp_.setZero();
-		Kp_.diagonal() << 10, 10, 10, 15, 15, 15;
-
-		Eigen::MatrixXd j_qd_;
-		Eigen::Isometry3d x_qd_;
-
-		j_qd_.setZero(6, 7);
-		x_qd_.linear().setZero();
-		x_qd_.translation().setZero();
-
-		j_qd_ = JacobianUpdate(q_desired_);
-		x_qd_ = PositionUpdate(q_desired_);
+		Kp_.diagonal() << 100, 100, 100, 150, 150, 150;
 		
-		j_inverse_ = j_qd_.transpose() * (j_qd_ * j_qd_.transpose()).inverse();
-		x_error_.head(3) = x_cubic_ - x_qd_.translation();
+		j_inverse_ = j_.transpose() * (j_* j_.transpose()).inverse();
+		x_error_.head(3) = x_cubic_ - x_;
 		x_error_.tail(3) = 0.5 * 
-							(DyrosMath::skew(x_qd_.linear().block(0,0,3,1)) * rotation_cubic_.block(0,0,3,1) + 
-							 DyrosMath::skew(x_qd_.linear().block(0,1,3,1)) * rotation_cubic_.block(0,1,3,1) + 
-							 DyrosMath::skew(x_qd_.linear().block(0,2,3,1)) * rotation_cubic_.block(0,2,3,1));	// From Advanced Robotics 77 page.
+							(DyrosMath::skew(rotation_.block(0,0,3,1)) * rotation_cubic_.block(0,0,3,1) + 
+							 DyrosMath::skew(rotation_.block(0,1,3,1)) * rotation_cubic_.block(0,1,3,1) + 
+							 DyrosMath::skew(rotation_.block(0,2,3,1)) * rotation_cubic_.block(0,2,3,1));	// From Advanced Robotics 77 page.
 		
 		qdot_desired_ = j_inverse_ * (xd_cubic_ + Kp_ * x_error_);
 
-		q_desired_ = q_desired_ + qdot_desired_ / hz_;
+		q_desired_ = q_ + qdot_desired_ / hz_;
+		// q_desired_ = q_desired_ + qdot_desired_ / hz_;
 
 		stringstream ss;
-		ss << x_cubic_.transpose()  << " " 
-		   << xd_cubic_.transpose() << " "
-		   << x_.transpose() << " "
-		   << x_dot_.transpose() << " "
-		   << Map< Matrix<double, 1, 9> >(rotation_.data(), rotation_.size());
+		// ss << x_cubic_.transpose()  << " " 
+		//    << xd_cubic_.transpose() << " "
+		//    << x_.transpose() << " "
+		//    << x_dot_.transpose() << " "
+		//    << Map< Matrix<double, 1, 9> >(rotation_.data(), rotation_.size());
 
-		// ss << q_(3);
+		ss << q_(3);
 		record(2, duration, ss);
 	}
 	else if (control_mode_ == "hw_3_4")
@@ -234,47 +231,42 @@ void ArmController::compute()
 		// Desired trajectory
 		x_cubic_ = DyrosMath::cubicVector<3>(play_time_, control_start_time_, control_start_time_ + duration,
 											 x_init_, x_target_, Vector3d::Zero(), Vector3d::Zero());
+		rotation_cubic_ = DyrosMath::rotationCubic(play_time_, control_start_time_, control_start_time_ + duration, 
+												   rotation_init_, rotation_target_);
+
 		xd_cubic_.head(3) = DyrosMath::cubicDotVector<3>(play_time_, control_start_time_, control_start_time_ + duration,
 														 x_init_, x_target_, Vector3d::Zero(), Vector3d::Zero());
 		xd_cubic_.tail(3) = DyrosMath::rotationCubicDot(play_time_, control_start_time_, control_start_time_ + duration,
 														Vector3d::Zero(), Vector3d::Zero(), rotation_init_, rotation_target_);
 
-		// CLIK
+		// CLIK (Control, not Planning, Weighted Pseudo Inverse)
 		Eigen::Matrix6d Kp_;
 		Kp_.setZero();
-		Kp_.diagonal() << 1, 1, 1, 30, 30, 30;
+		Kp_.diagonal() << 100, 100, 100, 150, 150, 150;
+		// Kp_.diagonal() << 1, 1, 1, 30, 30, 30;
 
 		Eigen::Matrix7d W_;
 		W_.setZero();
 		W_.diagonal() << 1.0, 1.0, 1.0, 1000.0, 1.0, 1.0, 1.0;
 
-		Eigen::MatrixXd j_qd_;
-		Eigen::Isometry3d x_qd_;
-
-		j_qd_.setZero(6, 7);
-		x_qd_.linear().setZero();
-		x_qd_.translation().setZero();
-
-		j_qd_ = JacobianUpdate(q_desired_);
-		x_qd_ = PositionUpdate(q_desired_);
-
-		j_inverse_ = W_.inverse() * j_qd_.transpose() * (j_qd_ * W_.inverse() * j_qd_.transpose()).inverse();
-		x_error_.head(3) = x_cubic_ - x_qd_.translation();
+		j_inverse_ = W_.inverse() * j_.transpose() * (j_ * W_.inverse() * j_.transpose()).inverse();
+		x_error_.head(3) = x_cubic_ - x_;
 		x_error_.tail(3) = 0.5 * 
-							(DyrosMath::skew(x_qd_.linear().block(0,0,3,1)) * rotation_cubic_.block(0,0,3,1) + 
-							 DyrosMath::skew(x_qd_.linear().block(0,1,3,1)) * rotation_cubic_.block(0,1,3,1) + 
-							 DyrosMath::skew(x_qd_.linear().block(0,2,3,1)) * rotation_cubic_.block(0,2,3,1));	// From Advanced Robotics 77 page.
+							(DyrosMath::skew(rotation_.block(0,0,3,1)) * rotation_cubic_.block(0,0,3,1) + 
+							 DyrosMath::skew(rotation_.block(0,1,3,1)) * rotation_cubic_.block(0,1,3,1) + 
+							 DyrosMath::skew(rotation_.block(0,2,3,1)) * rotation_cubic_.block(0,2,3,1));	// From Advanced Robotics 77 page.
 		
 		qdot_desired_ = j_inverse_ * (xd_cubic_ + Kp_ * x_error_);
 
-		q_desired_ = q_desired_ + qdot_desired_ / hz_;
+		q_desired_ = q_ + qdot_desired_ / hz_;
+		// q_desired_ = q_desired_ + qdot_desired_ / hz_;
 
 		stringstream ss;
-		ss << x_.transpose() << " "
-		   << x_dot_.transpose() << " "
-		   << Map< Matrix<double, 1, 9> >(rotation_.data(), rotation_.size());
+		// ss << x_.transpose() << " "
+		//    << x_dot_.transpose() << " "
+		//    << Map< Matrix<double, 1, 9> >(rotation_.data(), rotation_.size());
 
-		// ss << q_(3);
+		ss << q_(3);
 		record(3, duration, ss);
 	}
 	else
@@ -314,6 +306,7 @@ void ArmController::printState()
 	if (DBG_CNT++ > hz_ / 50.)
 	{
 		DBG_CNT = 0;
+		std::cout << "Control loop frenquency is : " << hz_ << " Hz " << std::endl;
 
 		cout << "q now    :\t";
 		cout << std::fixed << std::setprecision(3) << q_.transpose() << endl;

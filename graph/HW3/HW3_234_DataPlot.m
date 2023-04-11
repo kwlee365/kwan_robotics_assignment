@@ -41,7 +41,7 @@ fclose(fid)
 set(groot,'defaultAxesXGrid','on')
 set(groot,'defaultAxesYGrid','on')
 
-figure()
+figure('position', [10 10 800 600])
 hold on
 plot([1:400]/hz_, x_des(:,1),'--','Color','k','LineWidth', 5)
 plot([1:400]/hz_, x_32(:,1),'Color','g')
@@ -52,7 +52,7 @@ legend("desired pos [m]", "HW 3-2 actual pos [m]", "HW 3-3 actual pos [m]", "HW 
 title('X dir')
 ylim([0.2 0.6])
 
-figure()
+figure('position', [10 10 800 600])
 hold on
 plot([1:400]/hz_, x_des(:,2), '--','Color','k','LineWidth', 5)
 plot([1:400]/hz_, x_32(:,2),'Color','g')
@@ -63,7 +63,7 @@ legend("desired pos [m]", "HW 3-2 actual pos [m]", "HW 3-3 actual pos [m]", "HW 
 title('Y dir')
 ylim([-0.05 0.4])
 
-figure()
+figure('position', [10 10 800 600])
 hold on
 plot([1:400]/hz_, x_des(:,3), '--','Color','k','LineWidth', 5)
 plot([1:400]/hz_, x_32(:,3),'Color','g')
@@ -135,7 +135,7 @@ title('Z dir')
 
 %% Rot
 
-figure()
+figure('position', [10 10 800 600])
 for i = 1:9
     subplot(3,3,i)
     hold on

@@ -40,7 +40,7 @@ fclose(fid)
 set(groot,'defaultAxesXGrid','on')
 set(groot,'defaultAxesYGrid','on')
 
-figure()
+figure('position', [10 10 800 600])
 hold on
 plot([1:400]/hz_, x_des(:,1),'--','Color','k','LineWidth', 5)
 plot([1:400]/hz_, x_31(:,1),'Color','r')
@@ -51,7 +51,7 @@ hold off
 legend("desired pos [m]", "HW 3-1 actual pos [m]", "HW 3-2 actual pos [m]", "HW 3-3 actual pos [m]")
 title('X dir')
 
-figure()
+figure('position', [10 10 800 600])
 hold on
 plot([1:400]/hz_, x_des(:,2), '--','Color','k','LineWidth', 5)
 plot([1:400]/hz_, x_31(:,2),'Color','r')
@@ -62,7 +62,7 @@ legend("desired pos [m]", "HW 3-1 actual pos [m]", "HW 3-2 actual pos [m]", "HW 
 title('Y dir')
 ylim([-0.05 0.4])
 
-figure()
+figure('position', [10 10 800 600])
 hold on
 plot([1:400]/hz_, x_des(:,3), '--','Color','k','LineWidth', 5)
 plot([1:400]/hz_, x_31(:,3),'Color','r')
@@ -71,7 +71,7 @@ plot([1:400]/hz_, x_33(:,3),'Color','b')
 legend("desired pos [m]", "HW 3-1 actual pos [m]", "HW 3-2 actual pos [m]", "HW 3-3 actual pos [m]")
 hold off
 title('Z dir')
-ylim([0.64 0.655])
+ylim([0.648 0.655])
 
 %% x vel
 
@@ -134,7 +134,7 @@ title('Z dir')
 
 %% Rot
 
-figure()
+figure('position', [10 10 800 600])
 for i = 1:9
     subplot(3,3,i)
     hold on
