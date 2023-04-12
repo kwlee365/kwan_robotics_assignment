@@ -1,3 +1,0 @@
-/home/kwan/kwan_robotics_assignment/build/CMakeFiles/rebuild_cache.dir
-/home/kwan/kwan_robotics_assignment/build/CMakeFiles/edit_cache.dir
-/home/kwan/kwan_robotics_assignment/build/CMakeFiles/panda_control_vrep.dir
