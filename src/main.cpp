@@ -83,16 +83,16 @@ int main()
 				ac.setMode("torque_ctrl_dynamic");
 				break;
 			case '1':
-				ac.setMode("hw_3_1");
+				ac.setMode("hw_1");
 				break;
 			case '2':
-				ac.setMode("hw_3_2");
+				ac.setMode("hw_2");
 				break;
 			case '3':
-				ac.setMode("hw_3_3");
+				ac.setMode("hw_3");
 				break;
 			case '4':
-				ac.setMode("hw_3_4");
+				ac.setMode("hw_4");
 				break;
 			case '\t':
 				if (is_simulation_run) {

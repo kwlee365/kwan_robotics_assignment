@@ -30,6 +30,7 @@ class ArmController
 
 	// Control value (position controlled)
 	Vector7d q_desired_; // Control value
+	Vector7d q_dot_desired_; // Control value
 	Vector7d torque_desired_;
 
 	// Task space
@@ -53,7 +54,7 @@ class ArmController
 	Matrix<double, 3, 7> j_v_;	// Linear velocity Jacobian matrix
 	Matrix<double, 3, 7> j_w_;	// Angular veolicty Jacobain matrix
 	Matrix<double, 6, 7> j_;	// Full basic Jacobian matrix
-	Matrix<double, 7, 6> j_inverse_;	// Jacobain inverse storage 
+	Matrix<double, 7, 6> j_inverse_;	// Jacobain inverse storage
 
 	VectorXd q_temp_;	// For RBDL 
 	VectorXd qdot_temp_;
@@ -75,6 +76,7 @@ class ArmController
 	Vector3d x_2_; //4번 링크 CoM 위치
 	Matrix<double, 6, 7> j_2_; //4번 링크 CoM의 jacobian matrix
 	MatrixXd j_temp_2_; //각각 x_, j_, j_temp_2 변수 선언 밑에 작성
+	Matrix<double, 3, 7> j_2_v_; 
 
 	unsigned long tick_;
 	double play_time_;
