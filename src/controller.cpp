@@ -98,56 +98,10 @@ void ArmController::compute()
 	}
 	else if (control_mode_ == "hw_1")
 	{
-		Vector6d target_position_;
-		target_position_ << 0.25, 0.28, 0.65, 0.00, -0.15, 0.60; // final end effector pose
-
-		// (1)
-		Matrix<double, 6, DOF> J_; J_.setZero();
-		Matrix<double, DOF, 6> J_inverse_; J_inverse_.setZero();
-
-		J_.block<3, DOF>(0, 0) = j_v_;
-		J_.block<3, DOF>(3, 0) = j_v_2_;
-
-		double duration = 3.0;
-
-		Vector6d x_cubic; x_cubic.setZero();
-		Vector6d xd_cubic; xd_cubic.setZero();
-		Vector6d x_init; x_init.setZero();
-		x_init.head(3) = x_init_; x_init.tail(3) = x_2_init_;
-
-		for (int i = 0; i < 6; i++)
-		{
-			x_cubic(i) = DyrosMath::cubic(play_time_, control_start_time_,
-										  control_start_time_ + duration, x_init_(i), target_position_(i),
-										  0.0, 0.0);
-			xd_cubic(i) = DyrosMath::cubicDot(play_time_, control_start_time_,
-											  control_start_time_ + duration, x_init(i), target_position_(i),
-											  0.0, 0.0);
-		}
-
-		// (2)
-		Vector6d error_;
-		error_.head(3) = x_cubic.head(3) - x_;
-		error_.tail(3) = x_cubic.tail(3) - x_2_;
-
-		double d = 0.01;
-		J_inverse_ = J_.transpose() * (J_ * J_.transpose() + d * Matrix6d::Identity()).inverse();
-
-		// (4)
-		Matrix6d kp; kp.setZero();
-		kp = 10 * Matrix6d::Identity();
-
-		// (2)
-		q_dot_desired_ = J_inverse_ * (xd_cubic + kp * error_);
-		// (3)
-		q_desired_ = q_ + q_dot_desired_ * (1 / hz_);
-	}
-	else if (control_mode_ == "hw_2")
-	{
 		Vector6d target_position;
 		target_position << 0.25, 0.28, 0.65, 0.00, -0.15, 0.60; // final end effector pose
 
-		double duration = 3.0;
+		double duration = 6.0;
 
 		Vector6d x_cubic; x_cubic.setZero();
 		Vector6d xd_cubic; xd_cubic.setZero();
@@ -157,11 +111,11 @@ void ArmController::compute()
 
 		for (int i = 0; i < 6; i++)
 		{
-			x_cubic(i) = DyrosMath::cubic(play_time_, control_start_time_,
-										  control_start_time_ + duration, x_init_(i), target_position(i),
+			x_cubic(i) = DyrosMath::cubic(play_time_, control_start_time_, control_start_time_ + duration, 
+										  x_init_(i), target_position(i),
 										  0.0, 0.0);
-			xd_cubic(i) = DyrosMath::cubicDot(play_time_, control_start_time_,
-											  control_start_time_ + duration, x_init(i), target_position(i),
+			xd_cubic(i) = DyrosMath::cubicDot(play_time_, control_start_time_, control_start_time_ + duration, 
+											  x_init(i), target_position(i),
 											  0.0, 0.0);
 		}
 
@@ -170,28 +124,123 @@ void ArmController::compute()
 		error.tail(3) = x_cubic.tail(3) - x_2_;
 
 		Matrix6d kp; kp.setZero();
-		kp = 10 * Matrix6d::Identity();
+		kp = 1.0 * Matrix6d::Identity();
 
-		// (7), (9)
-		Vector6d x_dot_CLIK;
-		x_dot_CLIK.setZero();
+		Vector6d x_dot_CLIK; x_dot_CLIK.setZero();
 		x_dot_CLIK = xd_cubic + kp * error;
 
-		// (6)
 		Matrix<double, DOF, 3> j_v_inverse_; j_v_inverse_.setZero();
 		Matrix<double, DOF, 3> j_v_2_inverse_; j_v_2_inverse_.setZero();
 
 		j_v_inverse_ = j_v_.transpose() * (j_v_ * j_v_.transpose()).inverse();
 		j_v_2_inverse_ = j_v_2_.transpose() * (j_v_2_ * j_v_2_.transpose()).inverse();
 
-		Matrix7d Nullspace_projection;
-		Nullspace_projection.setZero();
+		Matrix7d Nullspace_projection; Nullspace_projection.setZero();
 		Nullspace_projection = Matrix7d::Identity() - j_v_inverse_ * j_v_;
 
-		// (8), (5)
-		q_dot_desired_ = j_v_inverse_ * x_dot_CLIK.head(3) + Nullspace_projection * j_v_2_inverse_ * (x_dot_CLIK.tail(3) - j_v_2_ * j_v_inverse_ * x_dot_CLIK.head(3));
-		// (10)
+		// While controlling task 1 by setting h1 = 1, Insert task 2 abruptly by changing h2 from 0 to 1 with step command
+		double h1, h2;
+		if (play_time_ <= control_start_time_ + (duration / 2.0))
+		{
+			h1 = 1.0;
+			h2 = 0.0;
+		}
+		else
+		{
+			h1 = 1.0;
+			h2 = 1.0;
+		}
+
+		Vector6d x_dot_task; x_dot_task.setZero();
+		x_dot_task.head(3) = h1 * x_dot_CLIK.head(3) + (1 - h1) * j_v_   * j_v_2_inverse_ * h2 * x_dot_CLIK.tail(3);
+		x_dot_task.tail(3) = h2 * x_dot_CLIK.tail(3) + (1 - h2) * j_v_2_ * j_v_inverse_   * h1 * x_dot_CLIK.head(3);
+
+		Matrix<double, 3, DOF> J2N1_; J2N1_.setZero();
+		Matrix<double, DOF, 3> J2N1_inverse_; J2N1_inverse_.setZero();
+		J2N1_ = j_v_2_*Nullspace_projection;
+		J2N1_inverse_ = J2N1_.transpose() * (J2N1_*J2N1_.transpose()).inverse();
+
+		// q_dot_desired_ = j_v_inverse_ * x_dot_task.head(3) + Nullspace_projection * J2N1_inverse_ * (x_dot_task.tail(3) - j_v_2_ * j_v_inverse_ * x_dot_task.head(3));
+		q_dot_desired_ = j_v_inverse_ * x_dot_task.head(3) + Nullspace_projection * j_v_2_inverse_ * (x_dot_task.tail(3) - j_v_2_ * j_v_inverse_ * x_dot_task.head(3));
 		q_desired_ = q_ + q_dot_desired_ * (1 / hz_);
+
+		std::cout << "time: " << play_time_ - control_start_time_ << std::endl;
+		std::cout << "h1: "   << h1 << std::endl;
+		std::cout << "h2: "   << h2 << std::endl;
+	}
+	else if (control_mode_ == "hw_2")
+	{
+		Vector6d target_position;
+		target_position << 0.25, 0.28, 0.65, 0.00, -0.15, 0.60; // final end effector pose
+
+		double duration = 6.0;
+
+		Vector6d x_cubic; x_cubic.setZero();
+		Vector6d xd_cubic; xd_cubic.setZero();
+		Vector6d x_init; x_init.setZero();
+		x_init.head(3) = x_init_;
+		x_init.tail(3) = x_2_init_;
+
+		for (int i = 0; i < 6; i++)
+		{
+			x_cubic(i) = DyrosMath::cubic(play_time_, control_start_time_, control_start_time_ + duration, 
+										  x_init_(i), target_position(i),
+										  0.0, 0.0);
+			xd_cubic(i) = DyrosMath::cubicDot(play_time_, control_start_time_, control_start_time_ + duration, 
+											  x_init(i), target_position(i),
+											  0.0, 0.0);
+		}
+
+		Vector6d error;
+		error.head(3) = x_cubic.head(3) - x_;
+		error.tail(3) = x_cubic.tail(3) - x_2_;
+
+		Matrix6d kp; kp.setZero();
+		kp = 1.5 * Matrix6d::Identity();
+
+		Vector6d x_dot_CLIK; x_dot_CLIK.setZero();
+		x_dot_CLIK = xd_cubic + kp * error;
+
+		Matrix<double, DOF, 3> j_v_inverse_; j_v_inverse_.setZero();
+		Matrix<double, DOF, 3> j_v_2_inverse_; j_v_2_inverse_.setZero();
+
+		j_v_inverse_ = j_v_.transpose() * (j_v_ * j_v_.transpose()).inverse();
+		j_v_2_inverse_ = j_v_2_.transpose() * (j_v_2_ * j_v_2_.transpose()).inverse();
+
+		Matrix7d Nullspace_projection; Nullspace_projection.setZero();
+		Nullspace_projection = Matrix7d::Identity() - j_v_inverse_ * j_v_;
+
+		// Insert task 2 smoothly by linearly increasing h2 from 0 to 1.
+		double t1, t2;
+		t1 = control_start_time_ + (duration / 2.0);
+		t2 = control_start_time_ + (duration / 2.0) + 1.0;
+
+		double h1 = 1.0;
+		double h2;
+		if (play_time_ >= control_start_time_ && play_time_ < t1)
+			h2 = 0.0;
+		else if (play_time_ >= t1 && play_time_ <= t2)
+			h2 = 1/(t2 - t1) * (play_time_ - t1); 
+		else
+			h2 = 1.0;
+
+		Vector6d x_dot_task; x_dot_task.setZero();
+		x_dot_task.head(3) = h1 * x_dot_CLIK.head(3) + (1 - h1) * j_v_   * j_v_2_inverse_ * h2 * x_dot_CLIK.tail(3);
+		x_dot_task.tail(3) = h2 * x_dot_CLIK.tail(3) + (1 - h2) * j_v_2_ * j_v_inverse_   * h1 * x_dot_CLIK.head(3);
+
+		Matrix<double, 3, DOF> J2N1_; J2N1_.setZero();
+		Matrix<double, DOF, 3> J2N1_inverse_; J2N1_inverse_.setZero();
+		J2N1_ = j_v_2_ * Nullspace_projection;
+		J2N1_inverse_ = J2N1_.transpose() * (J2N1_ * J2N1_.transpose()).inverse();
+
+		// q_dot_desired_ = j_v_inverse_ * x_dot_task.head(3) + Nullspace_projection * J2N1_inverse_ * (x_dot_task.tail(3) - j_v_2_ * j_v_inverse_ * x_dot_task.head(3));
+		q_dot_desired_ = j_v_inverse_ * x_dot_task.head(3) + Nullspace_projection * j_v_2_inverse_ * (x_dot_task.tail(3) - j_v_2_ * j_v_inverse_ * x_dot_task.head(3));
+
+		q_desired_ = q_ + q_dot_desired_ * (1 / hz_);
+
+		std::cout << "time: " << play_time_ - control_start_time_ << std::endl;
+		std::cout << "h1: "   << h1 << std::endl;
+		std::cout << "h2: "   << h2 << std::endl;
 	}
 	else if (control_mode_ == "hw_3")
 	{
@@ -204,7 +253,7 @@ void ArmController::compute()
 		torque_desired_ = g_;
 	}
 
-	printState();
+	// printState();
 
 	tick_++;
 	play_time_ = tick_ / hz_; // second
