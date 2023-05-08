@@ -3,8 +3,6 @@
 #include <iomanip>
 #include <cmath>
 
-
-
 void ArmController::compute()
 {
 	// Kinematics and dynamics calculation ------------------------------
@@ -14,7 +12,7 @@ void ArmController::compute()
 	RigidBodyDynamics::UpdateKinematicsCustom(*model_, &q_temp_, &qdot_temp_, NULL);
 	x_ = CalcBodyToBaseCoordinates(*model_, q_, body_id_[DOF - 1], com_position_[DOF - 1], true);
 	x_2_ = CalcBodyToBaseCoordinates(*model_, q_, body_id_[DOF - 4], com_position_[DOF - 4], true);
-	
+
 	rotation_ = CalcBodyWorldOrientation(*model_, q_, body_id_[DOF - 1], true).transpose();
 	Matrix3d body_to_ee_rotation;
 	body_to_ee_rotation.setIdentity();
@@ -24,7 +22,6 @@ void ArmController::compute()
 	CalcPointJacobian6D(*model_, q_, body_id_[DOF - 1], com_position_[DOF - 1], j_temp_, true);
 	CalcPointJacobian6D(*model_, q_, body_id_[DOF - 4], com_position_[DOF - 4], j_temp_2_, true);
 
-
 	NonlinearEffects(*model_, q_, Vector7d::Zero(), g_temp_);
 	CompositeRigidBodyAlgorithm(*model_, q_, m_temp_, true);
 
@@ -32,30 +29,27 @@ void ArmController::compute()
 	m_ = m_temp_;
 	m_inverse_ = m_.inverse();
 
-	for (int i = 0; i<2; i++)
+	for (int i = 0; i < 2; i++)
 	{
 		j_.block<3, DOF>(i * 3, 0) = j_temp_.block<3, DOF>(3 - i * 3, 0);
 		j_2_.block<3, DOF>(i * 3, 0) = j_temp_2_.block<3, DOF>(3 - i * 3, 0);
 	}
 	// -----------------------------------------------------
-	
-	
+
 	// ---------------------------------
 	//
 	// q_		: joint position
 	// qdot_	: joint velocity
-	// x_		: end-effector position 
+	// x_		: end-effector position
 	// j_		: end-effector basic jacobian
 	// m_		: mass matrix
 	//
 	//-------------------------------------------------------------------
-	
-	j_v_ = j_.block < 3, DOF>(0, 0);
-	j_2_v_ = j_2_.block < 3, DOF>(0, 0);
+
+	j_v_ = j_.block<3, DOF>(0, 0);
+	j_v_2_ = j_2_.block<3, DOF>(0, 0);
 	x_dot_ = j_ * qdot_;
-		
-	
-	
+
 	if (is_mode_changed_)
 	{
 		is_mode_changed_ = false;
@@ -96,65 +90,114 @@ void ArmController::compute()
 		target_position << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, M_PI / 4;
 		moveJointPosition(target_position, 1.0);
 	}
-	else if(control_mode_ == "joint_ctrl_init")
+	else if (control_mode_ == "joint_ctrl_init")
 	{
 		Vector7d target_position;
 		target_position << 0.0, 0.0, 0.0, -M_PI / 2.0, 0.0, M_PI / 2.0, 0;
-		moveJointPosition(target_position, 2.0);                     
+		moveJointPosition(target_position, 2.0);
 	}
 	else if (control_mode_ == "hw_1")
 	{
+		Vector6d target_position_;
+		target_position_ << 0.25, 0.28, 0.65, 0.00, -0.15, 0.60; // final end effector pose
+
+		// (1)
+		Matrix<double, 6, DOF> J_; J_.setZero();
+		Matrix<double, DOF, 6> J_inverse_; J_inverse_.setZero();
+
+		J_.block<3, DOF>(0, 0) = j_v_;
+		J_.block<3, DOF>(3, 0) = j_v_2_;
+
 		double duration = 3.0;
 
-		Eigen::Vector6d stacked_x_target_;
-		stacked_x_target_ << 0.25, 0.28, 0.65, // ee
-							 0.0, -0.15, 0.6;  // 4th link
+		Vector6d x_cubic; x_cubic.setZero();
+		Vector6d xd_cubic; xd_cubic.setZero();
+		Vector6d x_init; x_init.setZero();
+		x_init.head(3) = x_init_; x_init.tail(3) = x_2_init_;
 
-		Eigen::Vector6d stacked_x_init_, stacked_x_desired_, stacked_x_desired_dot_, stacked_x_error_;
-		stacked_x_desired_.setZero();stacked_x_desired_dot_.setZero();stacked_x_error_.setZero();
-		stacked_x_init_.segment(0, 3) = x_init_;
-		stacked_x_init_.segment(3, 3) = x_2_init_;
+		for (int i = 0; i < 6; i++)
+		{
+			x_cubic(i) = DyrosMath::cubic(play_time_, control_start_time_,
+										  control_start_time_ + duration, x_init_(i), target_position_(i),
+										  0.0, 0.0);
+			xd_cubic(i) = DyrosMath::cubicDot(play_time_, control_start_time_,
+											  control_start_time_ + duration, x_init(i), target_position_(i),
+											  0.0, 0.0);
+		}
 
-		stacked_x_desired_ = DyrosMath::cubicVector<6>(play_time_, control_start_time_, control_start_time_ + duration,
-													   stacked_x_init_, stacked_x_target_, Vector6d::Zero(), Vector6d::Zero());
-		stacked_x_desired_dot_ = DyrosMath::cubicDotVector<6>(play_time_, control_start_time_, control_start_time_ + duration,
-															  stacked_x_init_, stacked_x_target_, Vector6d::Zero(), Vector6d::Zero());
+		// (2)
+		Vector6d error_;
+		error_.head(3) = x_cubic.head(3) - x_;
+		error_.tail(3) = x_cubic.tail(3) - x_2_;
 
-		stacked_x_error_.segment(0, 3) = stacked_x_desired_.segment(0, 3) - x_;
-		stacked_x_error_.segment(3, 6) = stacked_x_desired_.segment(3, 6) - x_2_;
+		double d = 0.01;
+		J_inverse_ = J_.transpose() * (J_ * J_.transpose() + d * Matrix6d::Identity()).inverse();
 
-		Eigen::MatrixXd stacked_j_, stacked_j_inverse_;
-		stacked_j_.setZero(6, 7);
-		stacked_j_inverse_.setZero(7, 6);
-		stacked_j_.block(0, 0, 3, 7) = j_v_;
-		stacked_j_.block(3, 0, 3, 7) = j_2_v_;
+		// (4)
+		Matrix6d kp; kp.setZero();
+		kp = 10 * Matrix6d::Identity();
 
-		stacked_j_inverse_ = stacked_j_.transpose() * (stacked_j_ * stacked_j_.transpose() + 0.01 * Matrix6d::Identity()).inverse();
-
-		Eigen::Vector6d Kp_diag; Kp_diag << 50, 50, 50, 10, 10, 10;
-		Eigen::Matrix6d Kp; Kp = Kp_diag.asDiagonal();
-
-		q_dot_desired_ = stacked_j_inverse_ * (stacked_x_desired_ + Kp * stacked_x_error_);
-		q_desired_ = q_ + q_dot_desired_ / hz_;
-
-		// stringstream ss;
-		// ss << Map< Matrix<double, 1, 9> >(rotation_cubic_.data(), rotation_cubic_.size()) << " "
-		//    << x_.transpose() << " "
-		//    << x_dot_.transpose() << " "
-		//    << Map< Matrix<double, 1, 9> >(rotation_.data(), rotation_.size());
-		// record(1, duration, ss);
+		// (2)
+		q_dot_desired_ = J_inverse_ * (xd_cubic + kp * error_);
+		// (3)
+		q_desired_ = q_ + q_dot_desired_ * (1 / hz_);
 	}
 	else if (control_mode_ == "hw_2")
 	{
+		Vector6d target_position;
+		target_position << 0.25, 0.28, 0.65, 0.00, -0.15, 0.60; // final end effector pose
 
+		double duration = 3.0;
+
+		Vector6d x_cubic; x_cubic.setZero();
+		Vector6d xd_cubic; xd_cubic.setZero();
+		Vector6d x_init; x_init.setZero();
+		x_init.head(3) = x_init_;
+		x_init.tail(3) = x_2_init_;
+
+		for (int i = 0; i < 6; i++)
+		{
+			x_cubic(i) = DyrosMath::cubic(play_time_, control_start_time_,
+										  control_start_time_ + duration, x_init_(i), target_position(i),
+										  0.0, 0.0);
+			xd_cubic(i) = DyrosMath::cubicDot(play_time_, control_start_time_,
+											  control_start_time_ + duration, x_init(i), target_position(i),
+											  0.0, 0.0);
+		}
+
+		Vector6d error;
+		error.head(3) = x_cubic.head(3) - x_;
+		error.tail(3) = x_cubic.tail(3) - x_2_;
+
+		Matrix6d kp; kp.setZero();
+		kp = 10 * Matrix6d::Identity();
+
+		// (7), (9)
+		Vector6d x_dot_CLIK;
+		x_dot_CLIK.setZero();
+		x_dot_CLIK = xd_cubic + kp * error;
+
+		// (6)
+		Matrix<double, DOF, 3> j_v_inverse_; j_v_inverse_.setZero();
+		Matrix<double, DOF, 3> j_v_2_inverse_; j_v_2_inverse_.setZero();
+
+		j_v_inverse_ = j_v_.transpose() * (j_v_ * j_v_.transpose()).inverse();
+		j_v_2_inverse_ = j_v_2_.transpose() * (j_v_2_ * j_v_2_.transpose()).inverse();
+
+		Matrix7d Nullspace_projection;
+		Nullspace_projection.setZero();
+		Nullspace_projection = Matrix7d::Identity() - j_v_inverse_ * j_v_;
+
+		// (8), (5)
+		q_dot_desired_ = j_v_inverse_ * x_dot_CLIK.head(3) + Nullspace_projection * j_v_2_inverse_ * (x_dot_CLIK.tail(3) - j_v_2_ * j_v_inverse_ * x_dot_CLIK.head(3));
+		// (10)
+		q_desired_ = q_ + q_dot_desired_ * (1 / hz_);
 	}
 	else if (control_mode_ == "hw_3")
 	{
-		
 	}
 	else if (control_mode_ == "hw_4")
 	{
-		
 	}
 	else
 	{
@@ -164,20 +207,18 @@ void ArmController::compute()
 	printState();
 
 	tick_++;
-	play_time_ = tick_ / hz_;	// second
+	play_time_ = tick_ / hz_; // second
 }
 
 void ArmController::record(int file_number, double duration)
 {
 	if (play_time_ < control_start_time_ + duration + 1.0)
 	{
-		hw_plot_files_[file_number] << x_.transpose() <<
-			Map< Matrix<double, 1, 9> >(rotation_.data(), rotation_.size()) << x_cubic_.transpose() <<
-			endl;
+		hw_plot_files_[file_number] << x_.transpose() << Map<Matrix<double, 1, 9>>(rotation_.data(), rotation_.size()) << x_cubic_.transpose() << endl;
 	}
 }
 
-void ArmController::record(int file_number, double duration, const stringstream & ss)
+void ArmController::record(int file_number, double duration, const stringstream &ss)
 {
 	if (play_time_ < control_start_time_ + duration + 1.0)
 	{
@@ -210,61 +251,60 @@ void ArmController::printState()
 	}
 }
 
-void ArmController::moveJointPosition(const Vector7d & target_position, double duration)
+void ArmController::moveJointPosition(const Vector7d &target_position, double duration)
 {
 	Vector7d zero_vector;
 	zero_vector.setZero();
 	q_desired_ = DyrosMath::cubicVector<7>(play_time_,
-		control_start_time_,
-		control_start_time_ + duration, q_init_, target_position, zero_vector, zero_vector);
+										   control_start_time_,
+										   control_start_time_ + duration, q_init_, target_position, zero_vector, zero_vector);
 }
 
 void ArmController::moveJointPositionTorque(const Vector7d &target_position, double duration)
 {
 	Matrix7d kp, kv;
 	Vector7d q_cubic, qd_cubic;
-	
+
 	kp = Matrix7d::Identity() * 500.0;
 	kv = Matrix7d::Identity() * 20.0;
 
 	for (int i = 0; i < 7; i++)
 	{
 		qd_cubic(i) = DyrosMath::cubicDot(play_time_, control_start_time_,
-			control_start_time_ + duration, q_init_(i), target_position(i), 0, 0);
+										  control_start_time_ + duration, q_init_(i), target_position(i), 0, 0);
 		q_cubic(i) = DyrosMath::cubic(play_time_, control_start_time_,
-			control_start_time_ + duration, q_init_(i), target_position(i), 0, 0);
+									  control_start_time_ + duration, q_init_(i), target_position(i), 0, 0);
 	}
 
-
-	torque_desired_ = m_ * (kp*(q_cubic - q_) + kv*(qd_cubic - qdot_)) + g_;
+	torque_desired_ = m_ * (kp * (q_cubic - q_) + kv * (qd_cubic - qdot_)) + g_;
 }
 
-void ArmController::simpleJacobianControl(const Vector12d & target_x, double duration)
+void ArmController::simpleJacobianControl(const Vector12d &target_x, double duration)
 {
 	Vector6d xd_desired;
 	for (int i = 0; i < 3; i++)
 	{
 		xd_desired(i) = DyrosMath::cubicDot(play_time_, control_start_time_,
-			control_start_time_ + duration, x_init_(i), target_x(i), 0, 0);
+											control_start_time_ + duration, x_init_(i), target_x(i), 0, 0);
 	}
 	Matrix3d rotation;
 
 	for (int i = 0; i < 3; i++)
 	{
-		rotation.block<3, 1>(0, i) = target_x.segment<3>(3 + i*3);
+		rotation.block<3, 1>(0, i) = target_x.segment<3>(3 + i * 3);
 	}
 	xd_desired.segment<3>(3) = DyrosMath::rotationCubicDot(play_time_, control_start_time_,
-		control_start_time_ + duration, Vector3d::Zero(), Vector3d::Zero(), rotation_init_, rotation);
+														   control_start_time_ + duration, Vector3d::Zero(), Vector3d::Zero(), rotation_init_, rotation);
 
 	// debug_file_ << xd_desired.transpose() << endl;
 	// xd_desired.segment<3>(3).setZero();
-	Vector7d qd_desired = j_.transpose() * (j_*j_.transpose()).inverse() * xd_desired;
-	
+	Vector7d qd_desired = j_.transpose() * (j_ * j_.transpose()).inverse() * xd_desired;
+
 	q_desired_ = q_desired_ + qd_desired / hz_;
 	record(0, duration);
 }
 
-void ArmController::feedbackJacobianControl(const Vector12d & target_x, double duration)
+void ArmController::feedbackJacobianControl(const Vector12d &target_x, double duration)
 {
 	Vector6d delta_x_desired;
 	Vector3d x_cubic;
@@ -278,28 +318,27 @@ void ArmController::feedbackJacobianControl(const Vector12d & target_x, double d
 	for (int i = 0; i < 3; i++)
 	{
 		x_cubic(i) = DyrosMath::cubic(play_time_, control_start_time_,
-			control_start_time_ + duration, x_init_(i), target_x(i), 0, 0);
+									  control_start_time_ + duration, x_init_(i), target_x(i), 0, 0);
 	}
 
 	Matrix3d rotation_cubic = DyrosMath::rotationCubic(play_time_, control_start_time_,
-		control_start_time_ + duration, rotation_init_, rotation);
+													   control_start_time_ + duration, rotation_init_, rotation);
 	delta_x_desired.segment<3>(0) = x_cubic - x_;
-	delta_x_desired.segment<3>(3) = - 0.5 * DyrosMath::getPhi(rotation_, rotation_cubic) ;
+	delta_x_desired.segment<3>(3) = -0.5 * DyrosMath::getPhi(rotation_, rotation_cubic);
 
-	Vector7d qd_desired = j_.transpose() * (j_*j_.transpose()).inverse() * delta_x_desired;
+	Vector7d qd_desired = j_.transpose() * (j_ * j_.transpose()).inverse() * delta_x_desired;
 
 	q_desired_ = q_ + qd_desired;
 
 	stringstream ss;
-	ss << x_cubic.transpose() <<
-		Map< Matrix<double, 1, 9> >(rotation_cubic.data(), rotation_cubic.size());
+	ss << x_cubic.transpose() << Map<Matrix<double, 1, 9>>(rotation_cubic.data(), rotation_cubic.size());
 	record(1, duration);
 	record(3, duration, ss);
 }
 
 // Controller Core Methods ----------------------------
 
-void ArmController::setMode(const std::string & mode)
+void ArmController::setMode(const std::string &mode)
 {
 	is_mode_changed_ = true;
 	control_mode_ = mode;
@@ -326,28 +365,27 @@ void ArmController::initDimension()
 
 void ArmController::initModel()
 {
-    model_ = make_shared<Model>();
+	model_ = make_shared<Model>();
 
-    model_->gravity = Vector3d(0., 0, -GRAVITY);
+	model_->gravity = Vector3d(0., 0, -GRAVITY);
 
-    double mass[DOF];
-    mass[0] = 1.0;
-    mass[1] = 1.0;
-    mass[2] = 1.0;
-    mass[3] = 1.0;
-    mass[4] = 1.0;
-    mass[5] = 1.0;
-    mass[6] = 1.0;
+	double mass[DOF];
+	mass[0] = 1.0;
+	mass[1] = 1.0;
+	mass[2] = 1.0;
+	mass[3] = 1.0;
+	mass[4] = 1.0;
+	mass[5] = 1.0;
+	mass[6] = 1.0;
 
-    Vector3d axis[DOF];
+	Vector3d axis[DOF];
 	axis[0] = Eigen::Vector3d::UnitZ();
 	axis[1] = Eigen::Vector3d::UnitY();
 	axis[2] = Eigen::Vector3d::UnitZ();
-	axis[3] = -1.0*Eigen::Vector3d::UnitY();
+	axis[3] = -1.0 * Eigen::Vector3d::UnitY();
 	axis[4] = Eigen::Vector3d::UnitZ();
-	axis[5] = -1.0*Eigen::Vector3d::UnitY();
-	axis[6] = -1.0*Eigen::Vector3d::UnitZ();
-
+	axis[5] = -1.0 * Eigen::Vector3d::UnitY();
+	axis[6] = -1.0 * Eigen::Vector3d::UnitZ();
 
 	Eigen::Vector3d global_joint_position[DOF];
 
@@ -374,18 +412,19 @@ void ArmController::initModel()
 	for (int i = 0; i < DOF; i++)
 		com_position_[i] -= global_joint_position[i];
 
-    Math::Vector3d inertia[DOF];
+	Math::Vector3d inertia[DOF];
 	for (int i = 0; i < DOF; i++)
 		inertia[i] = Eigen::Vector3d::Identity() * 0.001;
 
-    for (int i = 0; i < DOF; i++) {
-        body_[i] = Body(mass[i], com_position_[i], inertia[i]);
-        joint_[i] = Joint(JointTypeRevolute, axis[i]);
-        if (i == 0)
-            body_id_[i] = model_->AddBody(0, Math::Xtrans(joint_posision_[i]), joint_[i], body_[i]);
-        else
-            body_id_[i] = model_->AddBody(body_id_[i - 1], Math::Xtrans(joint_posision_[i]), joint_[i], body_[i]);
-    }
+	for (int i = 0; i < DOF; i++)
+	{
+		body_[i] = Body(mass[i], com_position_[i], inertia[i]);
+		joint_[i] = Joint(JointTypeRevolute, axis[i]);
+		if (i == 0)
+			body_id_[i] = model_->AddBody(0, Math::Xtrans(joint_posision_[i]), joint_[i], body_[i]);
+		else
+			body_id_[i] = model_->AddBody(body_id_[i - 1], Math::Xtrans(joint_posision_[i]), joint_[i], body_[i]);
+	}
 }
 
 void ArmController::initFile()
@@ -416,54 +455,54 @@ void ArmController::readData(const Vector7d &position, const Vector7d &velocity)
 	}
 }
 
-const Vector7d & ArmController::getDesiredPosition()
+const Vector7d &ArmController::getDesiredPosition()
 {
 	return q_desired_;
 }
 
-const Vector7d & ArmController::getDesiredTorque()
+const Vector7d &ArmController::getDesiredTorque()
 {
 	return torque_desired_;
 }
 
 void ArmController::initPosition()
 {
-    q_init_ = q_;
-    q_desired_ = q_init_;
+	q_init_ = q_;
+	q_desired_ = q_init_;
 }
 
 // Kwan add
 
 Eigen::MatrixXd ArmController::JacobianUpdate(Eigen::Vector7d qd_)
 {
-    Eigen::MatrixXd j_temp, j_qd;
-    j_temp.setZero(6, 7);
-    j_qd.setZero(6, 7);
-    RigidBodyDynamics::CalcPointJacobian6D(*model_, qd_, body_id_[DOF - 1], com_position_[DOF - 1], j_temp_, true);
-    
-	for (int i = 0; i < 2; i++)
-    {
-        j_qd.block<3, 7>(i * 3, 0) = j_temp_.block<3, 7>(3 - i * 3, 0);
-    }
+	Eigen::MatrixXd j_temp, j_qd;
+	j_temp.setZero(6, 7);
+	j_qd.setZero(6, 7);
+	RigidBodyDynamics::CalcPointJacobian6D(*model_, qd_, body_id_[DOF - 1], com_position_[DOF - 1], j_temp_, true);
 
-    return j_qd;
+	for (int i = 0; i < 2; i++)
+	{
+		j_qd.block<3, 7>(i * 3, 0) = j_temp_.block<3, 7>(3 - i * 3, 0);
+	}
+
+	return j_qd;
 }
 
 Eigen::Isometry3d ArmController::PositionUpdate(Eigen::Vector7d qd_)
 {
-    Isometry3d x_qd;
-    x_qd.translation().setZero();
-    x_qd.linear().setZero();
+	Isometry3d x_qd;
+	x_qd.translation().setZero();
+	x_qd.linear().setZero();
 
-    x_qd.translation() = RigidBodyDynamics::CalcBodyToBaseCoordinates(*model_, qd_, body_id_[DOF - 1], com_position_[DOF - 1], true);
-    x_qd.linear() = RigidBodyDynamics::CalcBodyWorldOrientation(*model_, qd_, body_id_[DOF - 1], true).transpose();
+	x_qd.translation() = RigidBodyDynamics::CalcBodyToBaseCoordinates(*model_, qd_, body_id_[DOF - 1], com_position_[DOF - 1], true);
+	x_qd.linear() = RigidBodyDynamics::CalcBodyWorldOrientation(*model_, qd_, body_id_[DOF - 1], true).transpose();
 	Matrix3d body_to_ee_rotation;
 	body_to_ee_rotation.setIdentity();
 	body_to_ee_rotation(1, 1) = -1;
 	body_to_ee_rotation(2, 2) = -1;
 	x_qd.linear() = x_qd.linear() * body_to_ee_rotation;
 
-    return x_qd;
+	return x_qd;
 }
 
 // ----------------------------------------------------

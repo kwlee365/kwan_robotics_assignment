@@ -38,6 +38,7 @@ class ArmController
 	Vector3d x_2_init_;
 	Vector3d x_;
 	Vector3d x_desired_;
+	Vector3d x_dot_desired_;
 	Matrix3d rotation_;
 	Matrix3d rotation_init_;
 	Matrix3d rotation_desired_;
@@ -76,7 +77,7 @@ class ArmController
 	Vector3d x_2_; //4번 링크 CoM 위치
 	Matrix<double, 6, 7> j_2_; //4번 링크 CoM의 jacobian matrix
 	MatrixXd j_temp_2_; //각각 x_, j_, j_temp_2 변수 선언 밑에 작성
-	Matrix<double, 3, 7> j_2_v_; 
+	Matrix<double, 3, 7> j_v_2_; 
 
 	unsigned long tick_;
 	double play_time_;
