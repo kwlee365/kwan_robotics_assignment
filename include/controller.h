@@ -109,9 +109,9 @@ private:
 	void feedbackJacobianControl(const Vector12d & target_x, double duration);
 	void CLIK(const Vector12d & target_x, double duration);
 
-	Eigen::Isometry3d PositionUpdate(Eigen::Vector7d qd_);
-	Eigen::MatrixXd JacobianUpdate(Eigen::Vector7d qd_);
-
+	Eigen::Isometry3d PositionUpdate(Eigen::Vector7d qd_, int Joint_idx);
+	Eigen::MatrixXd JacobianUpdate(Eigen::Vector7d qd_, int Joint_idx);
+	
 public:
 	void readData(const Vector7d &position, const Vector7d &velocity, const Vector7d &torque);
 	void readData(const Vector7d &position, const Vector7d &velocity);

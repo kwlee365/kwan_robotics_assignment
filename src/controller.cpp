@@ -119,24 +119,35 @@ void ArmController::compute()
 											  0.0, 0.0);
 		}
 
+		Isometry3d x_qd; Isometry3d x_2_qd; 
+		x_qd.translation().setZero(); x_qd.linear().setZero();
+		x_2_qd.translation().setZero(); x_2_qd.linear().setZero();
+		x_qd = PositionUpdate(q_desired_, DOF);
+		x_2_qd = PositionUpdate(q_desired_, DOF-3);
+
+		Matrix<double, 3, DOF> j_qd; j_qd.setZero();
+		Matrix<double, 3, DOF> j_2_qd; j_2_qd.setZero();
+		j_qd = JacobianUpdate(q_desired_, DOF);
+		j_2_qd = JacobianUpdate(q_desired_, DOF-3);
+
 		Vector6d error;
-		error.head(3) = x_cubic.head(3) - x_;
-		error.tail(3) = x_cubic.tail(3) - x_2_;
+		error.head(3) = x_cubic.head(3) - x_qd.translation();
+		error.tail(3) = x_cubic.tail(3) - x_2_qd.translation();
 
 		Matrix6d kp; kp.setZero();
-		kp = 1.0 * Matrix6d::Identity();
+		kp = 10.0 * Matrix6d::Identity();
 
 		Vector6d x_dot_CLIK; x_dot_CLIK.setZero();
 		x_dot_CLIK = xd_cubic + kp * error;
 
-		Matrix<double, DOF, 3> j_v_inverse_; j_v_inverse_.setZero();
-		Matrix<double, DOF, 3> j_v_2_inverse_; j_v_2_inverse_.setZero();
+		Matrix<double, DOF, 3> j_qd_inverse_; j_qd_inverse_.setZero();
+		Matrix<double, DOF, 3> j_2_qd_inverse_; j_2_qd_inverse_.setZero();
 
-		j_v_inverse_ = j_v_.transpose() * (j_v_ * j_v_.transpose()).inverse();
-		j_v_2_inverse_ = j_v_2_.transpose() * (j_v_2_ * j_v_2_.transpose()).inverse();
+		j_qd_inverse_ = j_qd.transpose() * (j_qd * j_qd.transpose()).inverse();
+		j_2_qd_inverse_ = j_2_qd.transpose() * (j_2_qd * j_2_qd.transpose()).inverse();
 
 		Matrix7d Nullspace_projection; Nullspace_projection.setZero();
-		Nullspace_projection = Matrix7d::Identity() - j_v_inverse_ * j_v_;
+		Nullspace_projection = Matrix7d::Identity() - j_qd_inverse_ * j_qd;
 
 		// While controlling task 1 by setting h1 = 1, Insert task 2 abruptly by changing h2 from 0 to 1 with step command
 		double h1, h2;
@@ -152,21 +163,16 @@ void ArmController::compute()
 		}
 
 		Vector6d x_dot_task; x_dot_task.setZero();
-		x_dot_task.head(3) = h1 * x_dot_CLIK.head(3) + (1 - h1) * j_v_   * j_v_2_inverse_ * h2 * x_dot_CLIK.tail(3);
-		x_dot_task.tail(3) = h2 * x_dot_CLIK.tail(3) + (1 - h2) * j_v_2_ * j_v_inverse_   * h1 * x_dot_CLIK.head(3);
+		x_dot_task.head(3) = h1 * x_dot_CLIK.head(3) + (1 - h1) * j_qd   * j_2_qd_inverse_ * h2 * x_dot_CLIK.tail(3);
+		x_dot_task.tail(3) = h2 * x_dot_CLIK.tail(3) + (1 - h2) * j_2_qd * j_qd_inverse_   * h1 * x_dot_CLIK.head(3);
 
 		Matrix<double, 3, DOF> J2N1_; J2N1_.setZero();
 		Matrix<double, DOF, 3> J2N1_inverse_; J2N1_inverse_.setZero();
-		J2N1_ = j_v_2_*Nullspace_projection;
-		J2N1_inverse_ = J2N1_.transpose() * (J2N1_*J2N1_.transpose()).inverse();
+		J2N1_ = j_2_qd * Nullspace_projection;
+		J2N1_inverse_ = J2N1_.transpose() * (J2N1_ * J2N1_.transpose() + 0.001 * Matrix3d::Identity()).inverse();
 
-		// q_dot_desired_ = j_v_inverse_ * x_dot_task.head(3) + Nullspace_projection * J2N1_inverse_ * (x_dot_task.tail(3) - j_v_2_ * j_v_inverse_ * x_dot_task.head(3));
-		q_dot_desired_ = j_v_inverse_ * x_dot_task.head(3) + Nullspace_projection * j_v_2_inverse_ * (x_dot_task.tail(3) - j_v_2_ * j_v_inverse_ * x_dot_task.head(3));
-		q_desired_ = q_ + q_dot_desired_ * (1 / hz_);
-
-		std::cout << "time: " << play_time_ - control_start_time_ << std::endl;
-		std::cout << "h1: "   << h1 << std::endl;
-		std::cout << "h2: "   << h2 << std::endl;
+		q_dot_desired_ = j_qd_inverse_ * x_dot_task.head(3) + Nullspace_projection * J2N1_inverse_ * (x_dot_task.tail(3) - j_2_qd * j_qd_inverse_ * x_dot_task.head(3));
+		q_desired_ = q_desired_ + q_dot_desired_ * (1 / hz_);
 	}
 	else if (control_mode_ == "hw_2")
 	{
@@ -191,29 +197,40 @@ void ArmController::compute()
 											  0.0, 0.0);
 		}
 
+		Isometry3d x_qd; Isometry3d x_2_qd; 
+		x_qd.translation().setZero(); x_qd.linear().setZero();
+		x_2_qd.translation().setZero(); x_2_qd.linear().setZero();
+		x_qd = PositionUpdate(q_desired_, DOF);
+		x_2_qd = PositionUpdate(q_desired_, DOF-3);
+
+		Matrix<double, 3, DOF> j_qd; j_qd.setZero();
+		Matrix<double, 3, DOF> j_2_qd; j_2_qd.setZero();
+		j_qd = JacobianUpdate(q_desired_, DOF);
+		j_2_qd = JacobianUpdate(q_desired_, DOF-3);
+
 		Vector6d error;
-		error.head(3) = x_cubic.head(3) - x_;
-		error.tail(3) = x_cubic.tail(3) - x_2_;
+		error.head(3) = x_cubic.head(3) - x_qd.translation();
+		error.tail(3) = x_cubic.tail(3) - x_2_qd.translation();
 
 		Matrix6d kp; kp.setZero();
-		kp = 1.5 * Matrix6d::Identity();
+		kp = 10.0 * Matrix6d::Identity();
 
 		Vector6d x_dot_CLIK; x_dot_CLIK.setZero();
 		x_dot_CLIK = xd_cubic + kp * error;
 
-		Matrix<double, DOF, 3> j_v_inverse_; j_v_inverse_.setZero();
-		Matrix<double, DOF, 3> j_v_2_inverse_; j_v_2_inverse_.setZero();
+		Matrix<double, DOF, 3> j_qd_inverse_; j_qd_inverse_.setZero();
+		Matrix<double, DOF, 3> j_2_qd_inverse_; j_2_qd_inverse_.setZero();
 
-		j_v_inverse_ = j_v_.transpose() * (j_v_ * j_v_.transpose()).inverse();
-		j_v_2_inverse_ = j_v_2_.transpose() * (j_v_2_ * j_v_2_.transpose()).inverse();
+		j_qd_inverse_ = j_qd.transpose() * (j_qd * j_qd.transpose()).inverse();
+		j_2_qd_inverse_ = j_2_qd.transpose() * (j_2_qd * j_2_qd.transpose()).inverse();
 
 		Matrix7d Nullspace_projection; Nullspace_projection.setZero();
-		Nullspace_projection = Matrix7d::Identity() - j_v_inverse_ * j_v_;
+		Nullspace_projection = Matrix7d::Identity() - j_qd_inverse_ * j_qd;
 
 		// Insert task 2 smoothly by linearly increasing h2 from 0 to 1.
 		double t1, t2;
 		t1 = control_start_time_ + (duration / 2.0);
-		t2 = control_start_time_ + (duration / 2.0) + 1.0;
+		t2 = control_start_time_ + (duration / 2.0) + 2.0;
 
 		double h1 = 1.0;
 		double h2;
@@ -225,22 +242,16 @@ void ArmController::compute()
 			h2 = 1.0;
 
 		Vector6d x_dot_task; x_dot_task.setZero();
-		x_dot_task.head(3) = h1 * x_dot_CLIK.head(3) + (1 - h1) * j_v_   * j_v_2_inverse_ * h2 * x_dot_CLIK.tail(3);
-		x_dot_task.tail(3) = h2 * x_dot_CLIK.tail(3) + (1 - h2) * j_v_2_ * j_v_inverse_   * h1 * x_dot_CLIK.head(3);
+		x_dot_task.head(3) = h1 * x_dot_CLIK.head(3) + (1 - h1) * j_qd   * j_2_qd_inverse_ * h2 * x_dot_CLIK.tail(3);
+		x_dot_task.tail(3) = h2 * x_dot_CLIK.tail(3) + (1 - h2) * j_2_qd * j_qd_inverse_   * h1 * x_dot_CLIK.head(3);
 
 		Matrix<double, 3, DOF> J2N1_; J2N1_.setZero();
 		Matrix<double, DOF, 3> J2N1_inverse_; J2N1_inverse_.setZero();
-		J2N1_ = j_v_2_ * Nullspace_projection;
-		J2N1_inverse_ = J2N1_.transpose() * (J2N1_ * J2N1_.transpose()).inverse();
+		J2N1_ = j_2_qd * Nullspace_projection;
+		J2N1_inverse_ = J2N1_.transpose() * (J2N1_ * J2N1_.transpose() + 0.001 * Matrix3d::Identity()).inverse();
 
-		// q_dot_desired_ = j_v_inverse_ * x_dot_task.head(3) + Nullspace_projection * J2N1_inverse_ * (x_dot_task.tail(3) - j_v_2_ * j_v_inverse_ * x_dot_task.head(3));
-		q_dot_desired_ = j_v_inverse_ * x_dot_task.head(3) + Nullspace_projection * j_v_2_inverse_ * (x_dot_task.tail(3) - j_v_2_ * j_v_inverse_ * x_dot_task.head(3));
-
-		q_desired_ = q_ + q_dot_desired_ * (1 / hz_);
-
-		std::cout << "time: " << play_time_ - control_start_time_ << std::endl;
-		std::cout << "h1: "   << h1 << std::endl;
-		std::cout << "h2: "   << h2 << std::endl;
+		q_dot_desired_ = j_qd_inverse_ * x_dot_task.head(3) + Nullspace_projection * J2N1_inverse_ * (x_dot_task.tail(3) - j_2_qd * j_qd_inverse_ * x_dot_task.head(3));
+		q_desired_ = q_desired_ + q_dot_desired_ * (1 / hz_);
 	}
 	else if (control_mode_ == "hw_3")
 	{
@@ -253,7 +264,7 @@ void ArmController::compute()
 		torque_desired_ = g_;
 	}
 
-	// printState();
+	printState();
 
 	tick_++;
 	play_time_ = tick_ / hz_; // second
@@ -522,29 +533,29 @@ void ArmController::initPosition()
 
 // Kwan add
 
-Eigen::MatrixXd ArmController::JacobianUpdate(Eigen::Vector7d qd_)
+Eigen::MatrixXd ArmController::JacobianUpdate(Eigen::Vector7d qd_, int Joint_idx)
 {
 	Eigen::MatrixXd j_temp, j_qd;
 	j_temp.setZero(6, 7);
 	j_qd.setZero(6, 7);
-	RigidBodyDynamics::CalcPointJacobian6D(*model_, qd_, body_id_[DOF - 1], com_position_[DOF - 1], j_temp_, true);
+	RigidBodyDynamics::CalcPointJacobian6D(*model_, qd_, body_id_[Joint_idx - 1], com_position_[Joint_idx - 1], j_temp_, true);
 
 	for (int i = 0; i < 2; i++)
 	{
 		j_qd.block<3, 7>(i * 3, 0) = j_temp_.block<3, 7>(3 - i * 3, 0);
 	}
 
-	return j_qd;
+	return j_qd.block<3, 7>(0, 0);
 }
 
-Eigen::Isometry3d ArmController::PositionUpdate(Eigen::Vector7d qd_)
+Eigen::Isometry3d ArmController::PositionUpdate(Eigen::Vector7d qd_, int Joint_idx)
 {
 	Isometry3d x_qd;
 	x_qd.translation().setZero();
 	x_qd.linear().setZero();
 
-	x_qd.translation() = RigidBodyDynamics::CalcBodyToBaseCoordinates(*model_, qd_, body_id_[DOF - 1], com_position_[DOF - 1], true);
-	x_qd.linear() = RigidBodyDynamics::CalcBodyWorldOrientation(*model_, qd_, body_id_[DOF - 1], true).transpose();
+	x_qd.translation() = RigidBodyDynamics::CalcBodyToBaseCoordinates(*model_, qd_, body_id_[Joint_idx - 1], com_position_[Joint_idx - 1], true);
+	x_qd.linear() = RigidBodyDynamics::CalcBodyWorldOrientation(*model_, qd_, body_id_[Joint_idx - 1], true).transpose();
 	Matrix3d body_to_ee_rotation;
 	body_to_ee_rotation.setIdentity();
 	body_to_ee_rotation(1, 1) = -1;
