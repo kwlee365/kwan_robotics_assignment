@@ -137,10 +137,8 @@ private:
 	constexpr static int NUM_HW_PLOT{15};
 	ofstream hw_plot_files_[NUM_HW_PLOT];
 	const string hw_plot_file_names_[NUM_HW_PLOT]
-	{"/home/kwan/kwan_robotics_assignment/graph/HW3/HW3-1",
-	 "/home/kwan/kwan_robotics_assignment/graph/HW3/HW3-2",
-	 "/home/kwan/kwan_robotics_assignment/graph/HW3/HW3-3",
-	 "/home/kwan/kwan_robotics_assignment/graph/HW3/HW3-4"};
+	{"/home/kwan/kwan_robotics_assignment/graph/HW1",
+	 "/home/kwan/kwan_robotics_assignment/graph/HW2"};
 
 	void record(int file_number, double duration);
 	void record(int file_number, double duration, const stringstream & ss);

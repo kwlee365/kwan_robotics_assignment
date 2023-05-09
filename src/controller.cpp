@@ -108,7 +108,7 @@ void ArmController::compute()
 		J_.block<3, DOF>(0, 0) = j_v_;
 		J_.block<3, DOF>(3, 0) = j_v_2_;
 
-		double duration = 3.0;
+		double duration = 6.0;
 
 		Vector6d x_cubic; x_cubic.setZero();
 		Vector6d xd_cubic; xd_cubic.setZero();
@@ -141,13 +141,20 @@ void ArmController::compute()
 		q_dot_desired_ = J_inverse_ * (xd_cubic + kp * error_);
 		// (3)
 		q_desired_ = q_ + q_dot_desired_ * (1 / hz_);
+
+		stringstream ss;
+		ss << x_cubic.transpose() << " "
+		   << x_.transpose() << " "
+		   << x_2_.transpose();
+
+		record(0, duration, ss);
 	}
 	else if (control_mode_ == "hw_2")
 	{
 		Vector6d target_position;
 		target_position << 0.25, 0.28, 0.65, 0.00, -0.15, 0.60; // final end effector pose
 
-		double duration = 3.0;
+		double duration = 6.0;
 
 		Vector6d x_cubic; x_cubic.setZero();
 		Vector6d xd_cubic; xd_cubic.setZero();
@@ -192,6 +199,13 @@ void ArmController::compute()
 		q_dot_desired_ = j_v_inverse_ * x_dot_CLIK.head(3) + Nullspace_projection * j_v_2_inverse_ * (x_dot_CLIK.tail(3) - j_v_2_ * j_v_inverse_ * x_dot_CLIK.head(3));
 		// (10)
 		q_desired_ = q_ + q_dot_desired_ * (1 / hz_);
+
+		stringstream ss;
+		ss << x_cubic.transpose() << " "
+		   << x_.transpose() << " "
+		   << x_2_.transpose();
+
+		record(1, duration, ss);
 	}
 	else if (control_mode_ == "hw_3")
 	{
@@ -234,7 +248,7 @@ void ArmController::printState()
 	if (DBG_CNT++ > hz_ / 50.)
 	{
 		DBG_CNT = 0;
-		std::cout << "Control loop frenquency is : " << hz_ << " Hz " << std::endl;
+		std::cout << "sim time: " << play_time_ - control_start_time_ << std::endl;
 
 		cout << "q now    :\t";
 		cout << std::fixed << std::setprecision(3) << q_.transpose() << endl;
