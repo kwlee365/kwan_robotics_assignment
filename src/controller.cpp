@@ -173,6 +173,14 @@ void ArmController::compute()
 
 		q_dot_desired_ = j_qd_inverse_ * x_dot_task.head(3) + Nullspace_projection * J2N1_inverse_ * (x_dot_task.tail(3) - j_2_qd * j_qd_inverse_ * x_dot_task.head(3));
 		q_desired_ = q_desired_ + q_dot_desired_ * (1 / hz_);
+
+		stringstream ss;
+		ss << x_cubic.transpose() << " "
+		   << x_.transpose() << " "
+		   << x_2_.transpose() << " "
+		   << h2;
+
+		record(0, duration, ss);
 	}
 	else if (control_mode_ == "hw_2")
 	{
@@ -252,6 +260,14 @@ void ArmController::compute()
 
 		q_dot_desired_ = j_qd_inverse_ * x_dot_task.head(3) + Nullspace_projection * J2N1_inverse_ * (x_dot_task.tail(3) - j_2_qd * j_qd_inverse_ * x_dot_task.head(3));
 		q_desired_ = q_desired_ + q_dot_desired_ * (1 / hz_);
+
+		stringstream ss;
+		ss << x_cubic.transpose() << " "
+		   << x_.transpose() << " "
+		   << x_2_.transpose() << " "
+		   << h2;
+
+		record(1, duration, ss);
 	}
 	else if (control_mode_ == "hw_3")
 	{
