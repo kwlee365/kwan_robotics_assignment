@@ -186,17 +186,19 @@ void ArmController::compute()
 
 		// (6)
 		Matrix<double, DOF, 3> j_v_inverse_; j_v_inverse_.setZero();
-		Matrix<double, DOF, 3> j_v_2_inverse_; j_v_2_inverse_.setZero();
-
 		j_v_inverse_ = j_v_.transpose() * (j_v_ * j_v_.transpose()).inverse();
-		j_v_2_inverse_ = j_v_2_.transpose() * (j_v_2_ * j_v_2_.transpose()).inverse();
 
 		Matrix7d Nullspace_projection;
 		Nullspace_projection.setZero();
 		Nullspace_projection = Matrix7d::Identity() - j_v_inverse_ * j_v_;
 
+		Matrix<double, 3, DOF> J2N1_; J2N1_.setZero();
+		Matrix<double, DOF, 3> J2N1_inverse_; J2N1_inverse_.setZero();
+		J2N1_ = j_v_2_ * Nullspace_projection;
+		J2N1_inverse_ = J2N1_.transpose() * (J2N1_ * J2N1_.transpose() + 0.01 * Matrix3d::Identity()).inverse();
+		
 		// (8), (5)
-		q_dot_desired_ = j_v_inverse_ * x_dot_CLIK.head(3) + Nullspace_projection * j_v_2_inverse_ * (x_dot_CLIK.tail(3) - j_v_2_ * j_v_inverse_ * x_dot_CLIK.head(3));
+		q_dot_desired_ = j_v_inverse_ * x_dot_CLIK.head(3) + Nullspace_projection * J2N1_inverse_ * (x_dot_CLIK.tail(3) - j_v_2_ * j_v_inverse_ * x_dot_CLIK.head(3));
 		// (10)
 		q_desired_ = q_ + q_dot_desired_ * (1 / hz_);
 
