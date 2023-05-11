@@ -41,10 +41,10 @@ int kbhit(void)
 
 int main()
 {
-	// VRepBridge vb(VRepBridge::CTRL_TORQUE); // Torque controlled
-	VRepBridge vb(VRepBridge::CTRL_POSITION); // Position controlled 
-	// const double hz = 1000 ;
-	const double hz = 100;
+	VRepBridge vb(VRepBridge::CTRL_TORQUE); // Torque controlled
+	// VRepBridge vb(VRepBridge::CTRL_POSITION); // Position controlled 
+	const double hz = 1000 ;
+	// const double hz = 100;
 	ArmController ac(hz);
 	bool is_simulation_run = true;
 	bool exit_flag = false;
@@ -63,8 +63,6 @@ int main()
 			is_first = false;
 			ac.initPosition();
 		}
-
-		int hw_trigger_ = 3;
 
 		if (kbhit())
 		{
@@ -93,6 +91,9 @@ int main()
 				break;
 			case '4':
 				ac.setMode("hw_4");
+				break;
+			case '5':
+				ac.setMode("hw_5");
 				break;
 			case '\t':
 				if (is_simulation_run) {

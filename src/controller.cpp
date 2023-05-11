@@ -93,187 +93,128 @@ void ArmController::compute()
 	else if (control_mode_ == "joint_ctrl_init")
 	{
 		Vector7d target_position;
-		target_position << 0.0, 0.0, 0.0, -M_PI / 2.0, 0.0, M_PI / 2.0, 0;
-		moveJointPosition(target_position, 2.0);
+		target_position << 0.0, 0.0, 0.0, -30.0*DEG2RAD, 0.0, 90.0*DEG2RAD, 0.0;
+		moveJointPositionTorque(target_position, 1.0);
 	}
 	else if (control_mode_ == "hw_1")
 	{
-		Vector6d target_position;
-		target_position << 0.25, 0.28, 0.65, 0.00, -0.15, 0.60; // final end effector pose
+		double duration = 3.0;	
 
-		double duration = 6.0;
+		q_desired_ << 0.0, 0.0, 0.0, -25.0*DEG2RAD, 0.0, 90.0*DEG2RAD, 0.0;
+		q_dot_desired_.setZero();
 
-		Vector6d x_cubic; x_cubic.setZero();
-		Vector6d xd_cubic; xd_cubic.setZero();
-		Vector6d x_init; x_init.setZero();
-		x_init.head(3) = x_init_;
-		x_init.tail(3) = x_2_init_;
+		Matrix7d kp, kv;
 
-		for (int i = 0; i < 6; i++)
-		{
-			x_cubic(i) = DyrosMath::cubic(play_time_, control_start_time_, control_start_time_ + duration, 
-										  x_init_(i), target_position(i),
-										  0.0, 0.0);
-			xd_cubic(i) = DyrosMath::cubicDot(play_time_, control_start_time_, control_start_time_ + duration, 
-											  x_init(i), target_position(i),
-											  0.0, 0.0);
-		}
+		kp = Matrix7d::Identity() * 40.0;
+		kv = Matrix7d::Identity() * 1.0;
 
-		Isometry3d x_qd; Isometry3d x_2_qd; 
-		x_qd.translation().setZero(); x_qd.linear().setZero();
-		x_2_qd.translation().setZero(); x_2_qd.linear().setZero();
-		x_qd = PositionUpdate(q_desired_, DOF);
-		x_2_qd = PositionUpdate(q_desired_, DOF-3);
+		torque_desired_ = kp*(q_desired_ - q_) + kv*(q_dot_desired_ - qdot_);
 
-		Matrix<double, 3, DOF> j_qd; j_qd.setZero();
-		Matrix<double, 3, DOF> j_2_qd; j_2_qd.setZero();
-		j_qd = JacobianUpdate(q_desired_, DOF);
-		j_2_qd = JacobianUpdate(q_desired_, DOF-3);
+		// stringstream ss;
+		// ss << q_desired_(3) << " "
+		//    << q_(3);
 
-		Vector6d error;
-		error.head(3) = x_cubic.head(3) - x_qd.translation();
-		error.tail(3) = x_cubic.tail(3) - x_2_qd.translation();
-
-		Matrix6d kp; kp.setZero();
-		kp = 10.0 * Matrix6d::Identity();
-
-		Vector6d x_dot_CLIK; x_dot_CLIK.setZero();
-		x_dot_CLIK = xd_cubic + kp * error;
-
-		Matrix<double, DOF, 3> j_qd_inverse_; j_qd_inverse_.setZero();
-		Matrix<double, DOF, 3> j_2_qd_inverse_; j_2_qd_inverse_.setZero();
-
-		j_qd_inverse_ = j_qd.transpose() * (j_qd * j_qd.transpose()).inverse();
-		j_2_qd_inverse_ = j_2_qd.transpose() * (j_2_qd * j_2_qd.transpose()).inverse();
-
-		Matrix7d Nullspace_projection; Nullspace_projection.setZero();
-		Nullspace_projection = Matrix7d::Identity() - j_qd_inverse_ * j_qd;
-
-		// While controlling task 1 by setting h1 = 1, Insert task 2 abruptly by changing h2 from 0 to 1 with step command
-		double h1, h2;
-		if (play_time_ <= control_start_time_ + (duration / 2.0))
-		{
-			h1 = 1.0;
-			h2 = 0.0;
-		}
-		else
-		{
-			h1 = 1.0;
-			h2 = 1.0;
-		}
-
-		Vector6d x_dot_task; x_dot_task.setZero();
-		x_dot_task.head(3) = h1 * x_dot_CLIK.head(3) + (1 - h1) * j_qd   * j_2_qd_inverse_ * h2 * x_dot_CLIK.tail(3);
-		x_dot_task.tail(3) = h2 * x_dot_CLIK.tail(3) + (1 - h2) * j_2_qd * j_qd_inverse_   * h1 * x_dot_CLIK.head(3);
-
-		Matrix<double, 3, DOF> J2N1_; J2N1_.setZero();
-		Matrix<double, DOF, 3> J2N1_inverse_; J2N1_inverse_.setZero();
-		J2N1_ = j_2_qd * Nullspace_projection;
-		J2N1_inverse_ = J2N1_.transpose() * (J2N1_ * J2N1_.transpose() + 0.001 * Matrix3d::Identity()).inverse();
-
-		q_dot_desired_ = j_qd_inverse_ * x_dot_task.head(3) + Nullspace_projection * J2N1_inverse_ * (x_dot_task.tail(3) - j_2_qd * j_qd_inverse_ * x_dot_task.head(3));
-		q_desired_ = q_desired_ + q_dot_desired_ * (1 / hz_);
-
-		stringstream ss;
-		ss << x_cubic.transpose() << " "
-		   << x_.transpose() << " "
-		   << x_2_.transpose() << " "
-		   << h2;
-
-		record(0, duration, ss);
+		// record(0, duration, ss);
 	}
 	else if (control_mode_ == "hw_2")
 	{
-		Vector6d target_position;
-		target_position << 0.25, 0.28, 0.65, 0.00, -0.15, 0.60; // final end effector pose
+		double duration = 3.0;	
 
-		double duration = 6.0;
+		q_desired_ << 0.0, 0.0, 0.0, -25.0*DEG2RAD, 0.0, 90.0*DEG2RAD, 0.0;
+		q_dot_desired_.setZero();
 
-		Vector6d x_cubic; x_cubic.setZero();
-		Vector6d xd_cubic; xd_cubic.setZero();
-		Vector6d x_init; x_init.setZero();
-		x_init.head(3) = x_init_;
-		x_init.tail(3) = x_2_init_;
+		Matrix7d kp, kv;
 
-		for (int i = 0; i < 6; i++)
-		{
-			x_cubic(i) = DyrosMath::cubic(play_time_, control_start_time_, control_start_time_ + duration, 
-										  x_init_(i), target_position(i),
-										  0.0, 0.0);
-			xd_cubic(i) = DyrosMath::cubicDot(play_time_, control_start_time_, control_start_time_ + duration, 
-											  x_init(i), target_position(i),
-											  0.0, 0.0);
-		}
+		kp = Matrix7d::Identity() * 40.0;
+		kv = Matrix7d::Identity() * 1.0;
 
-		Isometry3d x_qd; Isometry3d x_2_qd; 
-		x_qd.translation().setZero(); x_qd.linear().setZero();
-		x_2_qd.translation().setZero(); x_2_qd.linear().setZero();
-		x_qd = PositionUpdate(q_desired_, DOF);
-		x_2_qd = PositionUpdate(q_desired_, DOF-3);
-
-		Matrix<double, 3, DOF> j_qd; j_qd.setZero();
-		Matrix<double, 3, DOF> j_2_qd; j_2_qd.setZero();
-		j_qd = JacobianUpdate(q_desired_, DOF);
-		j_2_qd = JacobianUpdate(q_desired_, DOF-3);
-
-		Vector6d error;
-		error.head(3) = x_cubic.head(3) - x_qd.translation();
-		error.tail(3) = x_cubic.tail(3) - x_2_qd.translation();
-
-		Matrix6d kp; kp.setZero();
-		kp = 10.0 * Matrix6d::Identity();
-
-		Vector6d x_dot_CLIK; x_dot_CLIK.setZero();
-		x_dot_CLIK = xd_cubic + kp * error;
-
-		Matrix<double, DOF, 3> j_qd_inverse_; j_qd_inverse_.setZero();
-		Matrix<double, DOF, 3> j_2_qd_inverse_; j_2_qd_inverse_.setZero();
-
-		j_qd_inverse_ = j_qd.transpose() * (j_qd * j_qd.transpose()).inverse();
-		j_2_qd_inverse_ = j_2_qd.transpose() * (j_2_qd * j_2_qd.transpose()).inverse();
-
-		Matrix7d Nullspace_projection; Nullspace_projection.setZero();
-		Nullspace_projection = Matrix7d::Identity() - j_qd_inverse_ * j_qd;
-
-		// Insert task 2 smoothly by linearly increasing h2 from 0 to 1.
-		double t1, t2;
-		t1 = control_start_time_ + (duration / 2.0);
-		t2 = control_start_time_ + (duration / 2.0) + 2.0;
-
-		double h1 = 1.0;
-		double h2;
-		if (play_time_ >= control_start_time_ && play_time_ < t1)
-			h2 = 0.0;
-		else if (play_time_ >= t1 && play_time_ <= t2)
-			h2 = 1/(t2 - t1) * (play_time_ - t1); 
-		else
-			h2 = 1.0;
-
-		Vector6d x_dot_task; x_dot_task.setZero();
-		x_dot_task.head(3) = h1 * x_dot_CLIK.head(3) + (1 - h1) * j_qd   * j_2_qd_inverse_ * h2 * x_dot_CLIK.tail(3);
-		x_dot_task.tail(3) = h2 * x_dot_CLIK.tail(3) + (1 - h2) * j_2_qd * j_qd_inverse_   * h1 * x_dot_CLIK.head(3);
-
-		Matrix<double, 3, DOF> J2N1_; J2N1_.setZero();
-		Matrix<double, DOF, 3> J2N1_inverse_; J2N1_inverse_.setZero();
-		J2N1_ = j_2_qd * Nullspace_projection;
-		J2N1_inverse_ = J2N1_.transpose() * (J2N1_ * J2N1_.transpose() + 0.001 * Matrix3d::Identity()).inverse();
-
-		q_dot_desired_ = j_qd_inverse_ * x_dot_task.head(3) + Nullspace_projection * J2N1_inverse_ * (x_dot_task.tail(3) - j_2_qd * j_qd_inverse_ * x_dot_task.head(3));
-		q_desired_ = q_desired_ + q_dot_desired_ * (1 / hz_);
+		torque_desired_ = kp*(q_desired_ - q_) + kv*(q_dot_desired_ - qdot_) + g_;
 
 		stringstream ss;
-		ss << x_cubic.transpose() << " "
-		   << x_.transpose() << " "
-		   << x_2_.transpose() << " "
-		   << h2;
-
+		ss << q_desired_(3) << " "
+		   << q_(3);
+		   
 		record(1, duration, ss);
 	}
 	else if (control_mode_ == "hw_3")
 	{
+		double duration = 3.0;	
+
+		Vector7d target_position;
+		target_position << 0.0, 0.0, 0.0, -60.0*DEG2RAD, 0.0, 90.0*DEG2RAD, 0.0;	// initial value in Joint space
+
+		for (int i = 0; i < 7; i++)
+		{
+			q_desired_(i) = DyrosMath::cubic(play_time_, control_start_time_,
+											 control_start_time_ + duration, 
+											 q_init_(i), target_position(i), 0.0, 0.0);
+			q_dot_desired_(i) = DyrosMath::cubicDot(play_time_, control_start_time_,
+													control_start_time_ + duration, 
+													q_init_(i), target_position(i), 0.0, 0.0);
+		}		
+
+		Matrix7d kp, kv;
+
+		kp = Matrix7d::Identity() * 40.0;	// wn = 20rad/s
+		kv = Matrix7d::Identity() * 1.0;	// Critical damping
+
+		torque_desired_ = kp*(q_desired_ - q_) + kv*(q_dot_desired_ - qdot_) + g_;
+
+		stringstream ss;
+		ss << q_desired_(3) << " "
+		   << q_(3);
+		   
+		record(2, duration, ss);
 	}
 	else if (control_mode_ == "hw_4")
 	{
+		double duration = 3.0;	
+
+		q_desired_ << 0.0, 0.0, 0.0, -25.0*DEG2RAD, 0.0, 90.0*DEG2RAD, 0.0;
+		q_dot_desired_.setZero();
+
+		Matrix7d kp, kv;
+
+		kp = Matrix7d::Identity() * 400.0;
+		kv = Matrix7d::Identity() * 40.0;
+
+		torque_desired_ = m_*(kp*(q_desired_ - q_) + kv*(q_dot_desired_ - qdot_)) + g_;
+
+		stringstream ss;
+		ss << q_desired_(3) << " "
+		   << q_(3);
+		   
+		record(3, duration, ss);
+	}
+	else if (control_mode_ == "hw_5")
+	{
+		double duration = 3.0;	
+
+		Vector7d target_position;
+		target_position << 0.0, 0.0, 0.0, -60.0*DEG2RAD, 0.0, 90.0*DEG2RAD, 0.0;	// initial value in Joint space
+
+		for (int i = 0; i < 7; i++)
+		{
+			q_desired_(i) = DyrosMath::cubic(play_time_, control_start_time_,
+											 control_start_time_ + duration, 
+											 q_init_(i), target_position(i), 0.0, 0.0);
+			q_dot_desired_(i) = DyrosMath::cubicDot(play_time_, control_start_time_,
+													control_start_time_ + duration, 
+													q_init_(i), target_position(i), 0.0, 0.0);
+		}		
+
+		Matrix7d kp, kv;
+
+		kp = Matrix7d::Identity() * 400.0;	// wn = 20rad/s
+		kv = Matrix7d::Identity() * 40.0;	// Critical damping
+
+		torque_desired_ = m_*(kp*(q_desired_ - q_) + kv*(q_dot_desired_ - qdot_)) + g_;
+
+		stringstream ss;
+		ss << q_desired_(3) << " "
+		   << q_(3);
+		   
+		record(4, duration, ss);
 	}
 	else
 	{
@@ -310,18 +251,18 @@ void ArmController::printState()
 	if (DBG_CNT++ > hz_ / 50.)
 	{
 		DBG_CNT = 0;
-		std::cout << "Control loop frenquency is : " << hz_ << " Hz " << std::endl;
+		std::cout << "sim time: " << play_time_ - control_start_time_ << std::endl;
 
 		cout << "q now    :\t";
-		cout << std::fixed << std::setprecision(3) << q_.transpose() << endl;
+		cout << std::fixed << std::setprecision(3) << RAD2DEG*q_.transpose() << endl;
 		cout << "q desired:\t";
-		cout << std::fixed << std::setprecision(3) << q_desired_.transpose() << endl;
-		// cout << "t desired:\t";
-		// cout << std::fixed << std::setprecision(3) << torque_desired_.transpose() << endl;
+		cout << std::fixed << std::setprecision(3) << RAD2DEG*q_desired_.transpose() << endl;
+		cout << "t desired:\t";
+		cout << std::fixed << std::setprecision(3) << torque_desired_.transpose() << endl;
 		cout << "x        :\t";
 		cout << x_.transpose() << endl;
-		cout << "x_2_     :\t";
-		cout << x_2_.transpose() << endl;
+		// cout << "x_2_     :\t";
+		// cout << x_2_.transpose() << endl;
 		cout << "R        :\t" << endl;
 		cout << std::fixed << std::setprecision(3) << rotation_ << endl;
 	}
@@ -341,7 +282,7 @@ void ArmController::moveJointPositionTorque(const Vector7d &target_position, dou
 	Matrix7d kp, kv;
 	Vector7d q_cubic, qd_cubic;
 
-	kp = Matrix7d::Identity() * 500.0;
+	kp = Matrix7d::Identity() * 100.0;
 	kv = Matrix7d::Identity() * 20.0;
 
 	for (int i = 0; i < 7; i++)
@@ -351,7 +292,7 @@ void ArmController::moveJointPositionTorque(const Vector7d &target_position, dou
 		q_cubic(i) = DyrosMath::cubic(play_time_, control_start_time_,
 									  control_start_time_ + duration, q_init_(i), target_position(i), 0, 0);
 	}
-
+	q_desired_ = q_cubic;
 	torque_desired_ = m_ * (kp * (q_cubic - q_) + kv * (qd_cubic - qdot_)) + g_;
 }
 
