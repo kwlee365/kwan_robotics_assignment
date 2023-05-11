@@ -4,60 +4,86 @@ close all;
 
 hz_ = 1000;
 tick = 4000;
-%% HW 7
+%% HW 8
 
 fid = fopen('/home/kwan/kwan_robotics_assignment/graph/HW1.txt');
-data = textscan(fid, '%f%f');
-q_des_step = [data{1}];
-q4_1 = [data{2}];
+data = textscan(fid, '%f%f%f%f%f%f');
+x_des_step = [data{1} data{2} data{3}];
+x_1 = [data{4} data{5} data{6}];
 fclose(fid)
 
 fid = fopen('/home/kwan/kwan_robotics_assignment/graph/HW2.txt');
-data = textscan(fid, '%f%f');
-q4_2 = [data{2}];
+data = textscan(fid, '%f%f%f%f%f%f');
+x_des_cubic = [data{1} data{2} data{3}];
+x_2 = [data{4} data{5} data{6}];
 fclose(fid)
 
 fid = fopen('/home/kwan/kwan_robotics_assignment/graph/HW3.txt');
-data = textscan(fid, '%f%f');
-q_des_cubic = [data{1}];
-q4_3 = [data{2}];
+data = textscan(fid, '%f%f%f%f%f%f');
+x_3 = [data{4} data{5} data{6}];
 fclose(fid)
 
 fid = fopen('/home/kwan/kwan_robotics_assignment/graph/HW4.txt');
-data = textscan(fid, '%f%f');
-q4_4 = [data{2}];
+data = textscan(fid, '%f%f%f%f%f%f');
+x_4 = [data{4} data{5} data{6}];
 fclose(fid)
 
-fid = fopen('/home/kwan/kwan_robotics_assignment/graph/HW5.txt');
-data = textscan(fid, '%f%f');
-q4_5 = [data{2}];
-fclose(fid)
 
-q_des_step = rad2deg(q_des_step);
-q_des_cubic = rad2deg(q_des_cubic);
-q4_1 = rad2deg(q4_1);
-q4_2 = rad2deg(q4_2);
-q4_3 = rad2deg(q4_3);
-q4_4 = rad2deg(q4_4);
-q4_5 = rad2deg(q4_5);
-
-%% q4
+%% x
 
 figure('Position', [10 10 800 600])
 hold on
-plot([1:tick]/hz_, q_des_step(:,1),'--','Color','k','LineWidth', 5)
-plot([1:tick]/hz_, q4_1(:,1),'Color','r')
-plot([1:tick]/hz_, q4_2(:,1),'Color','b')
-plot([1:tick]/hz_, q4_4(:,1),'Color','g')
+plot([1:tick]/hz_, x_des_step(:,1),'--','Color','k','LineWidth', 5)
+plot([1:tick]/hz_, x_1(:,1),'Color','r')
+plot([1:tick]/hz_, x_3(:,1),'Color','b')
 hold off
-legend("Joint 4 step command [rad]", "HW 7-1 joint pos [rad]", "HW 7-2 joint pos [rad]", "HW 7-4 joint pos [rad]")
+legend("X step command [m]", "HW 8-1 X pos [m]", "HW 8-3 X pos [m]")
 title('Step command')
 
 figure('Position', [10 10 800 600])
 hold on
-plot([1:tick]/hz_, q_des_cubic(:,1),'--','Color','k','LineWidth', 5)
-plot([1:tick]/hz_, q4_3(:,1),'Color','r')
-plot([1:tick]/hz_, q4_5(:,1),'Color','b')
+plot([1:tick]/hz_, x_des_cubic(:,1),'--','Color','k','LineWidth', 5)
+plot([1:tick]/hz_, x_2(:,1),'Color','r')
+plot([1:tick]/hz_, x_4(:,1),'Color','b')
 hold off
-legend("Joint 4 cubic command [rad]", "HW 7-3 joint pos [rad]", "HW 7-5 joint pos [rad]")
+legend("X cubic command [m]", "HW 8-2 X pos [m]", "HW 8-4 X pos [m]")
+title('Cubic command')
+
+%% Y
+figure('Position', [10 10 800 600])
+hold on
+plot([1:tick]/hz_, x_des_step(:,2),'--','Color','k','LineWidth', 5)
+plot([1:tick]/hz_, x_1(:,2),'Color','r')
+plot([1:tick]/hz_, x_3(:,2),'Color','b')
+hold off
+legend("Y step command [m]", "HW 8-1 Y pos [m]", "HW 8-3 Y pos [m]")
+title('Step command')
+
+figure('Position', [10 10 800 600])
+hold on
+plot([1:tick]/hz_, x_des_cubic(:,2),'--','Color','k','LineWidth', 5)
+plot([1:tick]/hz_, x_2(:,2),'Color','r')
+plot([1:tick]/hz_, x_4(:,2),'Color','b')
+hold off
+legend("Y cubic command [m]", "HW 8-2 Y pos [m]", "HW 8-4 Y pos [m]")
+title('Cubic command')
+
+%% Z
+
+figure('Position', [10 10 800 600])
+hold on
+plot([1:tick]/hz_, x_des_step(:,3),'--','Color','k','LineWidth', 5)
+plot([1:tick]/hz_, x_1(:,3),'Color','r')
+plot([1:tick]/hz_, x_3(:,3),'Color','b')
+hold off
+legend("Z step command [m]", "HW 8-1 Z pos [m]", "HW 8-3 Z pos [m]")
+title('Step command')
+
+figure('Position', [10 10 800 600])
+hold on
+plot([1:tick]/hz_, x_des_cubic(:,3),'--','Color','k','LineWidth', 5)
+plot([1:tick]/hz_, x_2(:,3),'Color','r')
+plot([1:tick]/hz_, x_4(:,3),'Color','b')
+hold off
+legend("Z cubic command [m]", "HW 8-2 Z pos [m]", "HW 8-4 Z pos [m]")
 title('Cubic command')

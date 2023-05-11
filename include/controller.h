@@ -139,8 +139,7 @@ private:
 	{"/home/kwan/kwan_robotics_assignment/graph/HW1",
 	 "/home/kwan/kwan_robotics_assignment/graph/HW2",
 	 "/home/kwan/kwan_robotics_assignment/graph/HW3",
-	 "/home/kwan/kwan_robotics_assignment/graph/HW4",
-	 "/home/kwan/kwan_robotics_assignment/graph/HW5"};
+	 "/home/kwan/kwan_robotics_assignment/graph/HW4"};
 
 	void record(int file_number, double duration);
 	void record(int file_number, double duration, const stringstream & ss);

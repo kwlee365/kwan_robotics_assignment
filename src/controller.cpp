@@ -93,128 +93,180 @@ void ArmController::compute()
 	else if (control_mode_ == "joint_ctrl_init")
 	{
 		Vector7d target_position;
-		target_position << 0.0, 0.0, 0.0, -30.0*DEG2RAD, 0.0, 90.0*DEG2RAD, 0.0;
+		target_position << 0.0, 0.0, 0.0, -90.0 * DEG2RAD, 0.0, 90.0 * DEG2RAD, 0.0;
 		moveJointPositionTorque(target_position, 1.0);
 	}
 	else if (control_mode_ == "hw_1")
 	{
-		double duration = 3.0;	
+		double duration = 3.0;
 
-		q_desired_ << 0.0, 0.0, 0.0, -25.0*DEG2RAD, 0.0, 90.0*DEG2RAD, 0.0;
-		q_dot_desired_.setZero();
+		x_desired_ = x_init_;
+		x_desired_(1) += 0.02;
 
-		Matrix7d kp, kv;
+		x_dot_desired_.setZero();
+		Matrix3d kp, kv;
 
-		kp = Matrix7d::Identity() * 40.0;
-		kv = Matrix7d::Identity() * 1.0;
+		kp = Matrix3d::Identity() * 40.0;
+		kv = Matrix3d::Identity() * 1.0;
 
-		torque_desired_ = kp*(q_desired_ - q_) + kv*(q_dot_desired_ - qdot_);
+		// Control input
+		Matrix6d lambda_;
+		lambda_ = (j_ * m_inverse_ * j_.transpose()).inverse();
 
-		// stringstream ss;
-		// ss << q_desired_(3) << " "
-		//    << q_(3);
+		Vector3d F_star_;
+		F_star_ = kp * (x_desired_ - x_) + kv * (x_dot_desired_ - x_dot_.head(3));
 
-		// record(0, duration, ss);
+		Vector3d phi_;
+		phi_ = -0.5 * (DyrosMath::skew(rotation_.block(0, 0, 3, 1)) * rotation_init_.block(0, 0, 3, 1) +
+					   DyrosMath::skew(rotation_.block(0, 1, 3, 1)) * rotation_init_.block(0, 1, 3, 1) +
+					   DyrosMath::skew(rotation_.block(0, 2, 3, 1)) * rotation_init_.block(0, 2, 3, 1));
+		Vector3d w_, M_star_;
+		w_ = x_dot_.tail(3);
+		M_star_ = -kp * phi_ - kv * w_;
+
+		Vector6d F_zero_;
+		F_zero_.head(3) = F_star_;
+		F_zero_.tail(3) = M_star_;
+
+		torque_desired_ = j_.transpose() * F_zero_ + g_;
+
+		stringstream ss;
+		ss << x_desired_.transpose() << " "
+		   << x_.transpose();
+
+		record(0, duration, ss);
 	}
 	else if (control_mode_ == "hw_2")
 	{
-		double duration = 3.0;	
+		double duration = 3.0;
 
-		q_desired_ << 0.0, 0.0, 0.0, -25.0*DEG2RAD, 0.0, 90.0*DEG2RAD, 0.0;
-		q_dot_desired_.setZero();
+		x_target_ = x_init_;
+		x_target_(1) += 0.1;
+		rotation_target_ << 1.0,  0.0,  0.0,
+							0.0, -1.0,  0.0,
+							0.0,  0.0, -1.0;
 
-		Matrix7d kp, kv;
+		x_desired_ = DyrosMath::cubicVector<3>(play_time_, control_start_time_, control_start_time_ + duration,
+											   x_init_, x_target_, Vector3d::Zero(), Vector3d::Zero());
+		x_dot_desired_ = DyrosMath::cubicDotVector<3>(play_time_, control_start_time_, control_start_time_ + duration,
+													  x_init_, x_target_, Vector3d::Zero(), Vector3d::Zero());
+		rotation_cubic_ = DyrosMath::rotationCubic(play_time_, control_start_time_, control_start_time_ + duration,
+												   rotation_init_, rotation_target_);
+		Matrix3d kp, kv;
 
-		kp = Matrix7d::Identity() * 40.0;
-		kv = Matrix7d::Identity() * 1.0;
+		kp = Matrix3d::Identity() * 40.0;
+		kv = Matrix3d::Identity() * 1.0;
+		// Control input
+		Matrix6d lambda_;
+		lambda_ = (j_ * m_inverse_ * j_.transpose()).inverse();
 
-		torque_desired_ = kp*(q_desired_ - q_) + kv*(q_dot_desired_ - qdot_) + g_;
+		Vector3d F_star_;
+		F_star_ = kp * (x_desired_ - x_) + kv * (x_dot_desired_ - x_dot_.head(3));
 
+		Vector3d M_star_, phi_, w_;
+		phi_ = -0.5 * (DyrosMath::skew(rotation_.block(0, 0, 3, 1)) * rotation_cubic_.block(0, 0, 3, 1) +
+					   DyrosMath::skew(rotation_.block(0, 1, 3, 1)) * rotation_cubic_.block(0, 1, 3, 1) +
+					   DyrosMath::skew(rotation_.block(0, 2, 3, 1)) * rotation_cubic_.block(0, 2, 3, 1));
+		w_ = x_dot_.tail(3);
+		M_star_ = -kp * phi_ - kv * w_;
+
+		Vector6d F_zero_;
+		F_zero_.head(3) = F_star_;
+		F_zero_.tail(3) = M_star_;
+
+		torque_desired_ = j_.transpose() * F_zero_ + g_;
+		
 		stringstream ss;
-		ss << q_desired_(3) << " "
-		   << q_(3);
-		   
+		ss << x_desired_.transpose() << " "
+		   << x_.transpose();
+
 		record(1, duration, ss);
 	}
 	else if (control_mode_ == "hw_3")
 	{
-		double duration = 3.0;	
+		double duration = 3.0;
 
-		Vector7d target_position;
-		target_position << 0.0, 0.0, 0.0, -60.0*DEG2RAD, 0.0, 90.0*DEG2RAD, 0.0;	// initial value in Joint space
+		x_desired_ = x_init_;
+		x_desired_(1) += 0.02;
 
-		for (int i = 0; i < 7; i++)
-		{
-			q_desired_(i) = DyrosMath::cubic(play_time_, control_start_time_,
-											 control_start_time_ + duration, 
-											 q_init_(i), target_position(i), 0.0, 0.0);
-			q_dot_desired_(i) = DyrosMath::cubicDot(play_time_, control_start_time_,
-													control_start_time_ + duration, 
-													q_init_(i), target_position(i), 0.0, 0.0);
-		}		
+		x_dot_desired_.setZero();
+		Matrix3d kp, kv;
 
-		Matrix7d kp, kv;
+		kp = Matrix3d::Identity() * 400.0;
+		kv = Matrix3d::Identity() * 40.0;
 
-		kp = Matrix7d::Identity() * 40.0;	// wn = 20rad/s
-		kv = Matrix7d::Identity() * 1.0;	// Critical damping
+		// Control input
+		Matrix6d lambda_;
+		lambda_ = (j_ * m_inverse_ * j_.transpose()).inverse();
 
-		torque_desired_ = kp*(q_desired_ - q_) + kv*(q_dot_desired_ - qdot_) + g_;
+		Vector3d F_star_;
+		F_star_ = kp * (x_desired_ - x_) + kv * (x_dot_desired_ - x_dot_.head(3));
+
+		Vector3d phi_;
+		phi_ = -0.5 * (DyrosMath::skew(rotation_.block(0, 0, 3, 1)) * rotation_init_.block(0, 0, 3, 1) +
+					   DyrosMath::skew(rotation_.block(0, 1, 3, 1)) * rotation_init_.block(0, 1, 3, 1) +
+					   DyrosMath::skew(rotation_.block(0, 2, 3, 1)) * rotation_init_.block(0, 2, 3, 1));
+		Vector3d w_, M_star_;
+		w_ = x_dot_.tail(3);
+		M_star_ = -kp * phi_ - kv * w_;
+
+		Vector6d F_zero_;
+		F_zero_.head(3) = F_star_;
+		F_zero_.tail(3) = M_star_;
+
+		torque_desired_ = j_.transpose() * lambda_ * F_zero_ + g_;
 
 		stringstream ss;
-		ss << q_desired_(3) << " "
-		   << q_(3);
-		   
+		ss << x_desired_.transpose() << " "
+		   << x_.transpose();
+
 		record(2, duration, ss);
 	}
 	else if (control_mode_ == "hw_4")
 	{
-		double duration = 3.0;	
+		double duration = 3.0;
 
-		q_desired_ << 0.0, 0.0, 0.0, -25.0*DEG2RAD, 0.0, 90.0*DEG2RAD, 0.0;
-		q_dot_desired_.setZero();
+		x_target_ = x_init_;
+		x_target_(1) += 0.1;
+		rotation_target_ << 1.0,  0.0,  0.0,
+							0.0, -1.0,  0.0,
+							0.0,  0.0, -1.0;
 
-		Matrix7d kp, kv;
+		x_desired_ = DyrosMath::cubicVector<3>(play_time_, control_start_time_, control_start_time_ + duration,
+											   x_init_, x_target_, Vector3d::Zero(), Vector3d::Zero());
+		x_dot_desired_ = DyrosMath::cubicDotVector<3>(play_time_, control_start_time_, control_start_time_ + duration,
+													  x_init_, x_target_, Vector3d::Zero(), Vector3d::Zero());
+		rotation_cubic_ = DyrosMath::rotationCubic(play_time_, control_start_time_, control_start_time_ + duration,
+												   rotation_init_, rotation_target_);
+		Matrix3d kp, kv;
 
-		kp = Matrix7d::Identity() * 400.0;
-		kv = Matrix7d::Identity() * 40.0;
+		kp = Matrix3d::Identity() * 400.0;
+		kv = Matrix3d::Identity() * 40.0;
 
-		torque_desired_ = m_*(kp*(q_desired_ - q_) + kv*(q_dot_desired_ - qdot_)) + g_;
+		// Control input
+		Matrix6d lambda_;
+		lambda_ = (j_ * m_inverse_ * j_.transpose()).inverse();
 
+		Vector3d F_star_;
+		F_star_ = kp * (x_desired_ - x_) + kv * (x_dot_desired_ - x_dot_.head(3));
+
+		Vector3d M_star_, phi_, w_;
+		phi_ = -0.5 * (DyrosMath::skew(rotation_.block(0, 0, 3, 1)) * rotation_cubic_.block(0, 0, 3, 1) +
+					   DyrosMath::skew(rotation_.block(0, 1, 3, 1)) * rotation_cubic_.block(0, 1, 3, 1) +
+					   DyrosMath::skew(rotation_.block(0, 2, 3, 1)) * rotation_cubic_.block(0, 2, 3, 1));
+		w_ = x_dot_.tail(3);
+		M_star_ = -kp * phi_ - kv * w_;
+
+		Vector6d F_zero_;
+		F_zero_.head(3) = F_star_;
+		F_zero_.tail(3) = M_star_;
+
+		torque_desired_ = j_.transpose() * lambda_ * F_zero_ + g_;
 		stringstream ss;
-		ss << q_desired_(3) << " "
-		   << q_(3);
-		   
+		ss << x_desired_.transpose() << " "
+		   << x_.transpose();
+
 		record(3, duration, ss);
-	}
-	else if (control_mode_ == "hw_5")
-	{
-		double duration = 3.0;	
-
-		Vector7d target_position;
-		target_position << 0.0, 0.0, 0.0, -60.0*DEG2RAD, 0.0, 90.0*DEG2RAD, 0.0;	// initial value in Joint space
-
-		for (int i = 0; i < 7; i++)
-		{
-			q_desired_(i) = DyrosMath::cubic(play_time_, control_start_time_,
-											 control_start_time_ + duration, 
-											 q_init_(i), target_position(i), 0.0, 0.0);
-			q_dot_desired_(i) = DyrosMath::cubicDot(play_time_, control_start_time_,
-													control_start_time_ + duration, 
-													q_init_(i), target_position(i), 0.0, 0.0);
-		}		
-
-		Matrix7d kp, kv;
-
-		kp = Matrix7d::Identity() * 400.0;	// wn = 20rad/s
-		kv = Matrix7d::Identity() * 40.0;	// Critical damping
-
-		torque_desired_ = m_*(kp*(q_desired_ - q_) + kv*(q_dot_desired_ - qdot_)) + g_;
-
-		stringstream ss;
-		ss << q_desired_(3) << " "
-		   << q_(3);
-		   
-		record(4, duration, ss);
 	}
 	else
 	{
@@ -254,9 +306,9 @@ void ArmController::printState()
 		std::cout << "sim time: " << play_time_ - control_start_time_ << std::endl;
 
 		cout << "q now    :\t";
-		cout << std::fixed << std::setprecision(3) << RAD2DEG*q_.transpose() << endl;
+		cout << std::fixed << std::setprecision(3) << RAD2DEG * q_.transpose() << endl;
 		cout << "q desired:\t";
-		cout << std::fixed << std::setprecision(3) << RAD2DEG*q_desired_.transpose() << endl;
+		cout << std::fixed << std::setprecision(3) << RAD2DEG * q_desired_.transpose() << endl;
 		cout << "t desired:\t";
 		cout << std::fixed << std::setprecision(3) << torque_desired_.transpose() << endl;
 		cout << "x        :\t";

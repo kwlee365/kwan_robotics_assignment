@@ -92,9 +92,6 @@ int main()
 			case '4':
 				ac.setMode("hw_4");
 				break;
-			case '5':
-				ac.setMode("hw_5");
-				break;
 			case '\t':
 				if (is_simulation_run) {
 					cout << "Simulation Pause" << endl;
