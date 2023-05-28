@@ -73,6 +73,9 @@ int main()
 				// Implement with user input
 			case 'i':
 				ac.setMode("joint_ctrl_init");
+				break;	
+			case 'I':
+				ac.setMode("joint_ctrl_Init");
 				break;
 			case 'h':
 				ac.setMode("joint_ctrl_home");
@@ -81,16 +84,16 @@ int main()
 				ac.setMode("torque_ctrl_dynamic");
 				break;
 			case '1':
-				ac.setMode("hw_1");
+				ac.setMode("hw_1-1");
 				break;
 			case '2':
-				ac.setMode("hw_2");
+				ac.setMode("hw_1-2");
 				break;
 			case '3':
-				ac.setMode("hw_3");
+				ac.setMode("hw_2");
 				break;
 			case '4':
-				ac.setMode("hw_4");
+				ac.setMode("hw_3");
 				break;
 			case '\t':
 				if (is_simulation_run) {
